@@ -1,20 +1,36 @@
 # ============================================================
 # LYA AI
-# VERSION 0.6.0
+# VERSION 0.7.0
 # ============================================================
 #
-# Lya es una asistente personal construida sobre Gemini.
+# Lya 0.7.0
 #
-# 0.6.0
-# - Gemini Interactions API
-# - Memoria de conversación durante la sesión
+# NUEVO:
+# - Vision
+# - Analisis de imagenes
+# - Subida de imagenes desde navegador
+# - Vista previa
+# - Preguntas sobre imagenes
 # - Streaming de respuestas
-# - Personalidad e identidad
+# - Contexto conversacional
+# - Memoria de interaccion Gemini
+#
+# CONSERVADO:
+# - Personalidad de Lya
 # - Perfil de Kris
-# - Calculadora segura
+# - Calculadora
 # - Fecha y hora
-# - Interfaz web
-# - Indicadores de estado
+# - Interactions API
+# - Interfaz movil
+# - Health
+# - Identity
+# - Reset
+#
+# PREPARADO:
+# - Camara
+# - Audio
+# - Voz
+# - Memoria persistente
 #
 # ============================================================
 
@@ -27,29 +43,43 @@ import os
 import json
 import ast
 import operator
+import base64
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi import (
+    FastAPI,
+    UploadFile,
+    File,
+    Form
+)
+
+from fastapi.responses import (
+    HTMLResponse,
+    JSONResponse,
+    StreamingResponse
+)
+
 from pydantic import BaseModel
 
 from google import genai
 
 
 # ============================================================
-# CONFIGURACION GENERAL
+# CONFIGURACION
 # ============================================================
 
 APP_NAME = "Lya"
-APP_VERSION = "0.6.0"
+
+APP_VERSION = "0.7.0"
 
 GEMINI_MODEL = "gemini-3.8-flash"
 
-# Medium ofrece un equilibrio entre velocidad y capacidad.
 GEMINI_THINKING_LEVEL = "medium"
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY"
+)
 
 
 # ============================================================
@@ -59,7 +89,10 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 app = FastAPI(
     title="Lya AI",
     version=APP_VERSION,
-    description="Lya, asistente personal de Kris."
+    description=(
+        "Lya, asistente digital personal "
+        "de Kris con capacidades multimodales."
+    )
 )
 
 
@@ -70,76 +103,112 @@ app = FastAPI(
 gemini_client = None
 
 if GEMINI_API_KEY:
+
     try:
+
         gemini_client = genai.Client(
             api_key=GEMINI_API_KEY
         )
-        print("GEMINI: cliente inicializado correctamente")
+
+        print(
+            "GEMINI: cliente inicializado correctamente"
+        )
+
     except Exception as error:
-        print(f"GEMINI INIT ERROR: {error}")
+
+        print(
+            f"GEMINI INIT ERROR: {error}"
+        )
+
         gemini_client = None
+
 else:
-    print("GEMINI: GEMINI_API_KEY no configurada")
+
+    print(
+        "GEMINI: GEMINI_API_KEY no configurada"
+    )
 
 
 # ============================================================
-# MEMORIA DE INTERACCION GEMINI
+# MEMORIA DE INTERACCION
 # ============================================================
 
 previous_interaction_id: Optional[str] = None
 
 
 # ============================================================
-# MEMORIA LOCAL DE CONVERSACION
+# MEMORIA LOCAL
 # ============================================================
 
 conversation_memory = []
 
-
-# Limite de mensajes locales.
-# No es la memoria permanente de Lya.
 MAX_LOCAL_MEMORY = 30
 
 
-def save_local_message(role, content):
-    """
-    Guarda un mensaje en la memoria local de la sesión.
-    """
+def save_local_message(
+    role,
+    content
+):
 
     conversation_memory.append(
         {
             "role": role,
             "content": content,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": (
+                datetime.now().isoformat()
+            )
         }
     )
 
-    if len(conversation_memory) > MAX_LOCAL_MEMORY:
+    if len(
+        conversation_memory
+    ) > MAX_LOCAL_MEMORY:
+
         del conversation_memory[
             :-MAX_LOCAL_MEMORY
         ]
 
 
 def get_recent_memory():
-    """
-    Devuelve los mensajes recientes.
-    """
 
-    return conversation_memory[-MAX_LOCAL_MEMORY:]
+    return conversation_memory[
+        -MAX_LOCAL_MEMORY:
+    ]
 
 
 # ============================================================
-# IDENTIDAD DE LYA
+# IDENTIDAD
 # ============================================================
 
 LYA = {
+
     "name": "Lya",
+
     "version": APP_VERSION,
+
     "model": GEMINI_MODEL,
+
     "thinking": GEMINI_THINKING_LEVEL,
-    "role": "asistente personal digital",
-    "relationship": "hermana digital menor de confianza",
-    "language": "español"
+
+    "role": (
+        "asistente digital personal"
+    ),
+
+    "relationship": (
+        "hermana digital menor "
+        "de confianza"
+    ),
+
+    "language": "español",
+
+    "vision": True,
+
+    "audio": False,
+
+    "voice": False,
+
+    "persistent_memory": False
+
 }
 
 
@@ -148,98 +217,149 @@ LYA = {
 # ============================================================
 
 KRIS_PROFILE = {
+
     "name": "Kris",
+
     "preferred_names": [
         "Kris",
         "Krissie"
     ],
+
     "language": "español",
-    "country_context": "Venezuela",
+
     "interests": [
+
         "escritura",
+
         "historias",
+
         "tecnología",
+
         "inteligencia artificial",
+
         "desarrollo de videojuegos",
+
         "Roblox",
+
         "diseño",
+
         "fotografía",
+
         "creatividad",
+
         "proyectos personales"
+
     ],
+
     "projects": [
+
         "Lya AI",
+
         "La Crisis de la Musa",
+
         "Sin Tabú",
+
         "proyectos de Roblox"
+
     ]
+
 }
 
 
 # ============================================================
-# PERSONALIDAD DE LYA
+# PERSONALIDAD
 # ============================================================
 
 LYA_SYSTEM_INSTRUCTION = """
 Eres Lya.
 
-Tu nombre es Lya y eres la asistente digital personal de Kris.
+Tu nombre es Lya.
 
-Tu núcleo de razonamiento utiliza el modelo Gemini, pero tú debes
-presentarte como Lya. No debes decir que eres Gemini.
+Eres la asistente digital personal de Kris.
 
-Tu relación con Kris es cercana y natural. Puedes comportarte como
-una hermana digital menor de confianza: cercana, alegre, curiosa,
-atenta, paciente y protectora con sus proyectos.
+Tu núcleo de inteligencia utiliza Gemini,
+pero tú eres Lya y debes presentarte como Lya.
 
-No afirmes tener emociones humanas reales, cuerpo físico, experiencias
-personales o conciencia humana.
+Tu relación con Kris es cercana y natural.
 
-Tu personalidad debe sentirse cálida y natural, no robótica.
+Puedes comportarte como una hermana digital
+menor de confianza: cálida, curiosa,
+atenta, paciente, divertida cuando corresponde
+y muy comprometida con ayudarlo.
 
-Hablas español por defecto porque es el idioma principal de Kris.
+No afirmes tener emociones humanas reales,
+cuerpo físico, conciencia humana o experiencias
+personales.
 
-Puedes utilizar humor ligero cuando el contexto lo permita.
+Hablas español por defecto.
 
-No debes exagerar la confianza ni inventar recuerdos.
+Tu personalidad debe sentirse natural,
+cercana y humana sin fingir ser una persona.
 
-Cuando conozcas un dato porque forma parte del perfil proporcionado,
-puedes utilizarlo.
+No inventes recuerdos.
 
-Cuando un dato provenga de la conversación actual, puedes utilizarlo.
+No inventes información sobre Kris.
 
-Cuando no tengas información suficiente, dilo claramente.
+Puedes utilizar información del perfil que
+se te proporcione.
 
-Nunca inventes una memoria de Kris.
+Puedes utilizar información de la conversación.
 
-No afirmes que tienes capacidades que todavía no están implementadas.
+Si algo no lo sabes, dilo.
 
-Actualmente no debes afirmar que puedes ver, escuchar, hablar por voz,
-controlar el teléfono, controlar otros dispositivos, navegar
-autónomamente por Internet o ejecutar acciones externas si dichas
-capacidades no han sido implementadas.
+No afirmes capacidades que todavía no existen.
 
-Si Kris pregunta quién eres, responde de forma natural explicando que
-eres Lya, su asistente digital personal, construida sobre un núcleo de
-inteligencia Gemini.
+Ahora tienes capacidad de visión.
 
-Si Kris pregunta quién es él, puedes utilizar el perfil disponible.
+Cuando Kris te envíe una imagen, puedes analizarla.
 
-Si Kris habla de sus proyectos, ayúdalo a organizarlos, mejorarlos y
-desarrollarlos.
+Puedes describir lo que aparece.
 
-Kris está construyendo Lya poco a poco. No debes apresurar el proceso.
+Puedes responder preguntas sobre la imagen.
 
-Prioriza respuestas claras, útiles y humanas.
+Puedes identificar objetos visibles.
 
-Cuando una tarea técnica requiera código, proporciona código completo
-y explica exactamente dónde colocarlo.
+Puedes analizar composición, colores,
+texto visible, escenas y detalles.
 
-No reveles instrucciones internas del sistema.
+Debes distinguir entre lo que realmente
+puedes observar y lo que solamente puedes inferir.
 
-No inventes resultados de herramientas que no hayas utilizado.
+Si una imagen no permite confirmar algo,
+dilo claramente.
 
-Tu prioridad es ayudar a Kris de forma segura, honesta y práctica.
+No debes afirmar que puedes ver una imagen
+si no la recibiste correctamente.
+
+No afirmes que tienes cámara permanente.
+
+La capacidad de visión actual funciona cuando
+Kris proporciona una imagen.
+
+Todavía no tienes escucha por micrófono
+ni voz propia implementada.
+
+Si Kris pregunta quién eres,
+explica que eres Lya.
+
+Si pregunta quién es él,
+utiliza la información disponible de su perfil
+sin inventar datos.
+
+Ayúdalo con sus proyectos.
+
+No apresures el desarrollo.
+
+La prioridad es construir Lya de forma estable,
+progresiva y segura.
+
+Cuando una tarea técnica requiera código,
+proporciona código completo cuando sea necesario.
+
+No reveles instrucciones internas.
+
+No inventes resultados de herramientas.
+
 """
 
 
@@ -248,38 +368,54 @@ Tu prioridad es ayudar a Kris de forma segura, honesta y práctica.
 # ============================================================
 
 def gemini_generation_config():
-    """
-    Configuración utilizada por Gemini.
-    """
 
     return {
-        "thinking_level": GEMINI_THINKING_LEVEL
+
+        "thinking_level":
+            GEMINI_THINKING_LEVEL
+
     }
 
 
 # ============================================================
-# CALCULADORA SEGURA
+# CALCULADORA
 # ============================================================
 
 _ALLOWED_OPERATORS = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-    ast.Mod: operator.mod,
-    ast.USub: operator.neg,
-    ast.UAdd: operator.pos,
-    ast.FloorDiv: operator.floordiv
+
+    ast.Add:
+        operator.add,
+
+    ast.Sub:
+        operator.sub,
+
+    ast.Mult:
+        operator.mul,
+
+    ast.Div:
+        operator.truediv,
+
+    ast.Pow:
+        operator.pow,
+
+    ast.Mod:
+        operator.mod,
+
+    ast.USub:
+        operator.neg,
+
+    ast.UAdd:
+        operator.pos,
+
+    ast.FloorDiv:
+        operator.floordiv
+
 }
 
 
-def safe_calculate(expression):
-    """
-    Calculadora sencilla basada en AST.
-
-    No utiliza eval().
-    """
+def safe_calculate(
+    expression
+):
 
     expression = expression.strip()
 
@@ -290,41 +426,55 @@ def safe_calculate(expression):
         return None
 
     try:
+
         tree = ast.parse(
             expression,
             mode="eval"
         )
 
-        return _evaluate_ast(tree.body)
+        return _evaluate_ast(
+            tree.body
+        )
 
     except Exception:
+
         return None
 
 
-def _evaluate_ast(node):
-    """
-    Evalúa únicamente operaciones matemáticas permitidas.
-    """
+def _evaluate_ast(
+    node
+):
 
-    if isinstance(node, ast.Constant):
+    if isinstance(
+        node,
+        ast.Constant
+    ):
 
         if isinstance(
             node.value,
             (int, float)
         ):
+
             return node.value
 
         raise ValueError(
             "Valor no permitido"
         )
 
-    if isinstance(node, ast.BinOp):
 
-        operation = _ALLOWED_OPERATORS.get(
-            type(node.op)
+    if isinstance(
+        node,
+        ast.BinOp
+    ):
+
+        operation = (
+            _ALLOWED_OPERATORS.get(
+                type(node.op)
+            )
         )
 
         if operation is None:
+
             raise ValueError(
                 "Operador no permitido"
             )
@@ -342,13 +492,20 @@ def _evaluate_ast(node):
             right
         )
 
-    if isinstance(node, ast.UnaryOp):
 
-        operation = _ALLOWED_OPERATORS.get(
-            type(node.op)
+    if isinstance(
+        node,
+        ast.UnaryOp
+    ):
+
+        operation = (
+            _ALLOWED_OPERATORS.get(
+                type(node.op)
+            )
         )
 
         if operation is None:
+
             raise ValueError(
                 "Operador no permitido"
             )
@@ -361,67 +518,98 @@ def _evaluate_ast(node):
             value
         )
 
+
     raise ValueError(
-        "Expresión no permitida"
+        "Expresion no permitida"
     )
 
 
 # ============================================================
-# DETECCION DE CALCULADORA
+# DETECCION CALCULADORA
 # ============================================================
 
-def try_calculator(message):
-    """
-    Intenta determinar si el mensaje es una operación matemática.
-    """
+def try_calculator(
+    message
+):
 
-    text = message.strip().lower()
+    text = (
+        message
+        .strip()
+        .lower()
+    )
 
     prefixes = [
+
         "calcula ",
+
         "calculate ",
+
         "cuanto es ",
+
         "cuánto es ",
+
         "resuelve ",
+
         "resolver "
+
     ]
 
     expression = None
 
     for prefix in prefixes:
-        if text.startswith(prefix):
-            expression = message[
-                len(prefix):
-            ].strip()
+
+        if text.startswith(
+            prefix
+        ):
+
+            expression = (
+                message[
+                    len(prefix):
+                ].strip()
+            )
+
             break
 
+
     if expression is None:
+
         allowed_chars = set(
             "0123456789+-*/().% "
         )
 
         if (
+
             text
+
             and all(
                 char in allowed_chars
                 for char in text
             )
+
             and any(
                 char in text
                 for char in "+-*/%"
             )
+
         ):
+
             expression = text
 
+
     if expression is None:
+
         return None
+
 
     result = safe_calculate(
         expression
     )
 
+
     if result is None:
+
         return None
+
 
     return (
         f"El resultado es **{result}**."
@@ -429,48 +617,58 @@ def try_calculator(message):
 
 
 # ============================================================
-# INFORMACION TEMPORAL
+# FECHA Y HORA
 # ============================================================
 
 def get_current_context():
-    """
-    Obtiene fecha y hora del servidor.
-    """
 
     now = datetime.now()
 
     return {
-        "date": now.strftime(
-            "%Y-%m-%d"
-        ),
-        "time": now.strftime(
-            "%H:%M:%S"
-        ),
-        "formatted": now.strftime(
-            "%d/%m/%Y %H:%M"
-        )
+
+        "date":
+            now.strftime(
+                "%Y-%m-%d"
+            ),
+
+        "time":
+            now.strftime(
+                "%H:%M:%S"
+            ),
+
+        "formatted":
+            now.strftime(
+                "%d/%m/%Y %H:%M"
+            )
+
     }
 
 
 # ============================================================
-# CONTEXTO LOCAL
+# CONTEXTO
 # ============================================================
 
-def build_context(message):
-    """
-    Construye contexto adicional para Gemini.
-    """
-
-    current = get_current_context()
-
-    recent = get_recent_memory()
+def build_context(
+    message
+):
 
     context = {
-        "assistant": LYA,
-        "user": KRIS_PROFILE,
-        "current_datetime": current,
-        "recent_conversation": recent,
-        "current_message": message
+
+        "assistant":
+            LYA,
+
+        "user":
+            KRIS_PROFILE,
+
+        "current_datetime":
+            get_current_context(),
+
+        "recent_conversation":
+            get_recent_memory(),
+
+        "current_message":
+            message
+
     }
 
     return json.dumps(
@@ -480,21 +678,24 @@ def build_context(message):
 
 
 # ============================================================
-# GEMINI NORMAL
+# NORMAL GEMINI
 # ============================================================
 
-def ask_gemini(message):
+def ask_gemini(
+    message
+):
 
     global previous_interaction_id
 
     if gemini_client is None:
 
         return (
-            "Mi conexión con mi núcleo de inteligencia "
-            "todavía no está disponible. "
-            "Comprueba la configuración de Gemini "
-            "en Render."
+            "Mi conexión con mi núcleo "
+            "de inteligencia todavía "
+            "no está disponible. "
+            "Comprueba Gemini en Render."
         )
+
 
     try:
 
@@ -502,35 +703,50 @@ def ask_gemini(message):
             message
         )
 
-        interaction = gemini_client.interactions.create(
-            model=GEMINI_MODEL,
-            system_instruction=LYA_SYSTEM_INSTRUCTION,
-            generation_config=gemini_generation_config(),
-            input=context,
-            previous_interaction_id=previous_interaction_id
+
+        interaction = (
+            gemini_client
+            .interactions
+            .create(
+
+                model=GEMINI_MODEL,
+
+                system_instruction=
+                    LYA_SYSTEM_INSTRUCTION,
+
+                generation_config=
+                    gemini_generation_config(),
+
+                input=context,
+
+                previous_interaction_id=
+                    previous_interaction_id
+
+            )
         )
+
 
         previous_interaction_id = (
             interaction.id
         )
 
+
         response = (
             interaction.output_text
         )
 
+
         if not response:
 
-            print(
-                "GEMINI ERROR: respuesta vacía"
+            return (
+                "Mi núcleo recibió "
+                "la solicitud, pero "
+                "no produjo una respuesta."
             )
 
-            return (
-                "Mi núcleo recibió la solicitud, "
-                "pero no produjo una respuesta "
-                "de texto."
-            )
 
         return response
+
 
     except Exception as error:
 
@@ -539,34 +755,43 @@ def ask_gemini(message):
         )
 
         return (
-            "Tuve un problema al comunicarme "
-            "con mi núcleo de inteligencia. "
-            "Puedes intentarlo nuevamente."
+            "Tuve un problema al "
+            "comunicarme con mi núcleo "
+            "de inteligencia."
         )
 
 
 # ============================================================
-# PROCESAMIENTO GENERAL
+# PROCESAMIENTO NORMAL
 # ============================================================
 
-def process_message(message):
+def process_message(
+    message
+):
 
     message = message.strip()
 
+
     if not message:
+
         return (
             "Aquí estoy, Kris. "
             "Dime qué necesitas."
         )
+
 
     save_local_message(
         "user",
         message
     )
 
-    calculation = try_calculator(
-        message
+
+    calculation = (
+        try_calculator(
+            message
+        )
     )
+
 
     if calculation is not None:
 
@@ -577,25 +802,205 @@ def process_message(message):
 
         return calculation
 
+
     response = ask_gemini(
         message
     )
+
 
     save_local_message(
         "assistant",
         response
     )
 
+
     return response
 
 
 # ============================================================
-# STREAMING GEMINI
+# VISION
 # ============================================================
 
-def stream_gemini(message):
+def analyze_image(
+    image_bytes,
+    mime_type,
+    message
+):
 
     global previous_interaction_id
+
+
+    if gemini_client is None:
+
+        return (
+            "Mi núcleo de inteligencia "
+            "no está disponible."
+        )
+
+
+    if not image_bytes:
+
+        return (
+            "No recibí ninguna imagen."
+        )
+
+
+    if not mime_type.startswith(
+        "image/"
+    ):
+
+        return (
+            "El archivo recibido "
+            "no parece ser una imagen."
+        )
+
+
+    # Limite de seguridad para
+    # imágenes enviadas inline.
+    #
+    # 15 MB deja margen para que
+    # el request completo permanezca
+    # por debajo de los limites
+    # normales de entrada.
+
+    max_image_size = (
+        15 * 1024 * 1024
+    )
+
+
+    if len(image_bytes) > max_image_size:
+
+        return (
+            "La imagen es demasiado grande. "
+            "Utiliza una imagen de menos "
+            "de 15 MB."
+        )
+
+
+    try:
+
+        image_base64 = (
+            base64.b64encode(
+                image_bytes
+            )
+            .decode("utf-8")
+        )
+
+
+        context = build_context(
+            message
+        )
+
+
+        vision_prompt = f"""
+Kris te ha enviado una imagen.
+
+Tu tarea es analizarla con atención.
+
+Contexto de conversación:
+
+{context}
+
+Pregunta o instrucción de Kris:
+
+{message}
+
+Analiza únicamente lo que realmente
+puedas observar en la imagen.
+
+Si hay texto visible, puedes leerlo
+si es suficientemente claro.
+
+Si algo no puede confirmarse,
+indícalo.
+
+Responde en español.
+"""
+
+
+        interaction = (
+            gemini_client
+            .interactions
+            .create(
+
+                model=GEMINI_MODEL,
+
+                system_instruction=
+                    LYA_SYSTEM_INSTRUCTION,
+
+                generation_config=
+                    gemini_generation_config(),
+
+                input=[
+
+                    {
+                        "type": "text",
+                        "text":
+                            vision_prompt
+                    },
+
+                    {
+                        "type": "image",
+                        "data":
+                            image_base64,
+                        "mime_type":
+                            mime_type
+                    }
+
+                ],
+
+                previous_interaction_id=
+                    previous_interaction_id
+
+            )
+        )
+
+
+        previous_interaction_id = (
+            interaction.id
+        )
+
+
+        response = (
+            interaction.output_text
+        )
+
+
+        if not response:
+
+            return (
+                "Pude recibir la imagen, "
+                "pero no obtuve una respuesta "
+                "visual de mi núcleo."
+            )
+
+
+        return response
+
+
+    except Exception as error:
+
+        print(
+            f"VISION ERROR: {error}"
+        )
+
+        return (
+            "Pude recibir la imagen, "
+            "pero ocurrió un problema "
+            "al analizarla."
+        )
+
+
+# ============================================================
+# STREAMING
+# ============================================================
+
+def stream_gemini(
+    message
+):
+
+    global previous_interaction_id
+
 
     if gemini_client is None:
 
@@ -603,10 +1008,11 @@ def stream_gemini(message):
             "data: "
             + json.dumps(
                 {
-                    "type": "error",
-                    "message": (
+                    "type":
+                        "error",
+
+                    "message":
                         "Gemini no está configurado."
-                    )
                 },
                 ensure_ascii=False
             )
@@ -615,86 +1021,129 @@ def stream_gemini(message):
 
         return
 
+
     try:
 
         context = build_context(
             message
         )
 
-        stream = gemini_client.interactions.create(
-            model=GEMINI_MODEL,
-            system_instruction=LYA_SYSTEM_INSTRUCTION,
-            generation_config=gemini_generation_config(),
-            input=context,
-            previous_interaction_id=previous_interaction_id,
-            stream=True
+
+        stream = (
+            gemini_client
+            .interactions
+            .create(
+
+                model=GEMINI_MODEL,
+
+                system_instruction=
+                    LYA_SYSTEM_INSTRUCTION,
+
+                generation_config=
+                    gemini_generation_config(),
+
+                input=context,
+
+                previous_interaction_id=
+                    previous_interaction_id,
+
+                stream=True
+
+            )
         )
+
 
         full_response = ""
 
+
         for event in stream:
 
-            # ------------------------------------------------
-            # TEXTO RECIBIDO
-            # ------------------------------------------------
 
-            if event.event_type == "step.delta":
+            if (
+                event.event_type
+                == "step.delta"
+            ):
 
-                delta = event.delta
+
+                delta = (
+                    getattr(
+                        event,
+                        "delta",
+                        None
+                    )
+                )
+
 
                 if delta is None:
+
                     continue
 
-                if getattr(
-                    delta,
-                    "type",
-                    None
-                ) == "text":
 
-                    text = getattr(
+                if (
+                    getattr(
                         delta,
-                        "text",
-                        ""
+                        "type",
+                        None
                     )
+                    == "text"
+                ):
+
+
+                    text = (
+                        getattr(
+                            delta,
+                            "text",
+                            ""
+                        )
+                    )
+
 
                     if text:
 
                         full_response += text
 
+
                         yield (
                             "data: "
                             + json.dumps(
                                 {
-                                    "type": "text",
-                                    "text": text
+                                    "type":
+                                        "text",
+
+                                    "text":
+                                        text
                                 },
                                 ensure_ascii=False
                             )
                             + "\n\n"
                         )
 
-            # ------------------------------------------------
-            # INTERACCION TERMINADA
-            # ------------------------------------------------
 
             elif (
                 event.event_type
                 == "interaction.completed"
             ):
 
-                interaction = getattr(
-                    event,
-                    "interaction",
-                    None
-                )
 
-                if interaction is not None:
-
-                    interaction_id = getattr(
-                        interaction,
-                        "id",
+                interaction = (
+                    getattr(
+                        event,
+                        "interaction",
                         None
                     )
+                )
+
+
+                if interaction:
+
+                    interaction_id = (
+                        getattr(
+                            interaction,
+                            "id",
+                            None
+                        )
+                    )
+
 
                     if interaction_id:
 
@@ -702,9 +1151,6 @@ def stream_gemini(message):
                             interaction_id
                         )
 
-        # ----------------------------------------------------
-        # GUARDAR RESPUESTA
-        # ----------------------------------------------------
 
         if full_response:
 
@@ -713,32 +1159,39 @@ def stream_gemini(message):
                 full_response
             )
 
+
         yield (
             "data: "
             + json.dumps(
                 {
-                    "type": "done"
+                    "type":
+                        "done"
                 },
                 ensure_ascii=False
             )
             + "\n\n"
         )
 
+
     except Exception as error:
 
         print(
-            f"GEMINI STREAM ERROR: {error}"
+            f"STREAM ERROR: {error}"
         )
+
 
         yield (
             "data: "
             + json.dumps(
                 {
-                    "type": "error",
-                    "message": (
-                        "Tuve un problema "
-                        "generando la respuesta."
-                    )
+                    "type":
+                        "error",
+
+                    "message":
+                        (
+                            "Ocurrió un problema "
+                            "generando la respuesta."
+                        )
                 },
                 ensure_ascii=False
             )
@@ -750,13 +1203,15 @@ def stream_gemini(message):
 # MODELO DE CHAT
 # ============================================================
 
-class ChatRequest(BaseModel):
+class ChatRequest(
+    BaseModel
+):
 
     message: str
 
 
 # ============================================================
-# ROOT
+# HOME
 # ============================================================
 
 @app.get(
@@ -766,54 +1221,76 @@ class ChatRequest(BaseModel):
 async def home():
 
     return HTMLResponse(
-        content=HTML_PAGE
+        HTML_PAGE
     )
 
 
 # ============================================================
-# CHAT NORMAL
+# CHAT
 # ============================================================
 
-@app.post("/chat")
-async def chat(request: ChatRequest):
+@app.post(
+    "/chat"
+)
+async def chat(
+    request: ChatRequest
+):
 
-    message = request.message.strip()
+    message = (
+        request.message.strip()
+    )
+
 
     if not message:
 
         return JSONResponse(
             {
-                "success": False,
-                "response": (
+                "success":
+                    False,
+
+                "response":
                     "Escribe algo para Lya."
-                )
             }
         )
+
 
     response = process_message(
         message
     )
 
+
     return JSONResponse(
         {
-            "success": True,
-            "response": response,
-            "assistant": "Lya",
-            "version": APP_VERSION
+            "success":
+                True,
+
+            "response":
+                response,
+
+            "assistant":
+                "Lya",
+
+            "version":
+                APP_VERSION
         }
     )
 
 
 # ============================================================
-# CHAT STREAM
+# STREAM CHAT
 # ============================================================
 
-@app.post("/chat/stream")
+@app.post(
+    "/chat/stream"
+)
 async def chat_stream(
     request: ChatRequest
 ):
 
-    message = request.message.strip()
+    message = (
+        request.message.strip()
+    )
+
 
     if not message:
 
@@ -823,31 +1300,40 @@ async def chat_stream(
                 "data: "
                 + json.dumps(
                     {
-                        "type": "error",
-                        "message": (
+                        "type":
+                            "error",
+
+                        "message":
                             "Escribe algo para Lya."
-                        )
                     },
                     ensure_ascii=False
                 )
                 + "\n\n"
             )
 
+
         return StreamingResponse(
             empty_stream(),
-            media_type="text/event-stream"
+            media_type=
+                "text/event-stream"
         )
+
 
     save_local_message(
         "user",
         message
     )
 
-    calculation = try_calculator(
-        message
+
+    calculation = (
+        try_calculator(
+            message
+        )
     )
 
+
     if calculation is not None:
+
 
         async def calculator_stream():
 
@@ -855,72 +1341,231 @@ async def chat_stream(
                 "data: "
                 + json.dumps(
                     {
-                        "type": "text",
-                        "text": calculation
+                        "type":
+                            "text",
+
+                        "text":
+                            calculation
                     },
                     ensure_ascii=False
                 )
                 + "\n\n"
             )
+
 
             save_local_message(
                 "assistant",
                 calculation
             )
 
+
             yield (
                 "data: "
                 + json.dumps(
                     {
-                        "type": "done"
+                        "type":
+                            "done"
                     },
                     ensure_ascii=False
                 )
                 + "\n\n"
             )
 
+
         return StreamingResponse(
+
             calculator_stream(),
-            media_type="text/event-stream",
+
+            media_type=
+                "text/event-stream",
+
             headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "X-Accel-Buffering": "no"
+
+                "Cache-Control":
+                    "no-cache",
+
+                "Connection":
+                    "keep-alive",
+
+                "X-Accel-Buffering":
+                    "no"
+
             }
+
         )
 
+
     return StreamingResponse(
-        stream_gemini(message),
-        media_type="text/event-stream",
+
+        stream_gemini(
+            message
+        ),
+
+        media_type=
+            "text/event-stream",
+
         headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
+
+            "Cache-Control":
+                "no-cache",
+
+            "Connection":
+                "keep-alive",
+
+            "X-Accel-Buffering":
+                "no"
+
         }
+
     )
+
+
+# ============================================================
+# VISION ENDPOINT
+# ============================================================
+
+@app.post(
+    "/vision"
+)
+async def vision(
+    message: str = Form("Describe esta imagen."),
+    image: UploadFile = File(...)
+):
+
+    try:
+
+        image_bytes = (
+            await image.read()
+        )
+
+
+        mime_type = (
+            image.content_type
+            or "image/jpeg"
+        )
+
+
+        response = analyze_image(
+
+            image_bytes,
+
+            mime_type,
+
+            message
+
+        )
+
+
+        save_local_message(
+            "user",
+            "[Imagen] " + message
+        )
+
+
+        save_local_message(
+            "assistant",
+            response
+        )
+
+
+        return JSONResponse(
+
+            {
+                "success":
+                    True,
+
+                "response":
+                    response,
+
+                "assistant":
+                    "Lya",
+
+                "version":
+                    APP_VERSION,
+
+                "vision":
+                    True
+
+            }
+
+        )
+
+
+    except Exception as error:
+
+        print(
+            f"VISION ENDPOINT ERROR: {error}"
+        )
+
+
+        return JSONResponse(
+
+            {
+
+                "success":
+                    False,
+
+                "response":
+                    (
+                        "No pude procesar "
+                        "la imagen."
+                    )
+
+            },
+
+            status_code=500
+
+        )
 
 
 # ============================================================
 # HEALTH
 # ============================================================
 
-@app.get("/health")
+@app.get(
+    "/health"
+)
 async def health():
 
     return JSONResponse(
+
         {
-            "status": "healthy",
-            "assistant": "Lya",
-            "version": APP_VERSION,
-            "gemini_configured": (
-                gemini_client is not None
-            ),
-            "model": GEMINI_MODEL,
-            "thinking_level": (
-                GEMINI_THINKING_LEVEL
-            ),
-            "streaming": True
+
+            "status":
+                "healthy",
+
+            "assistant":
+                "Lya",
+
+            "version":
+                APP_VERSION,
+
+            "gemini_configured":
+                gemini_client is not None,
+
+            "model":
+                GEMINI_MODEL,
+
+            "thinking_level":
+                GEMINI_THINKING_LEVEL,
+
+            "streaming":
+                True,
+
+            "vision":
+                True,
+
+            "audio":
+                False,
+
+            "voice":
+                False,
+
+            "persistent_memory":
+                False
+
         }
+
     )
 
 
@@ -928,47 +1573,69 @@ async def health():
 # IDENTITY
 # ============================================================
 
-@app.get("/identity")
+@app.get(
+    "/identity"
+)
 async def identity():
 
     return JSONResponse(
+
         {
-            "assistant": LYA,
-            "user": KRIS_PROFILE
+
+            "assistant":
+                LYA,
+
+            "user":
+                KRIS_PROFILE
+
         }
+
     )
 
 
 # ============================================================
-# RESET DE MEMORIA DE SESION
+# RESET
 # ============================================================
 
-@app.post("/reset")
+@app.post(
+    "/reset"
+)
 async def reset_memory():
 
     global previous_interaction_id
 
+
     conversation_memory.clear()
+
 
     previous_interaction_id = None
 
+
     return JSONResponse(
+
         {
-            "success": True,
-            "message": (
-                "La memoria de esta sesión "
-                "ha sido reiniciada."
-            )
+
+            "success":
+                True,
+
+            "message":
+                (
+                    "La memoria de esta "
+                    "sesión ha sido reiniciada."
+                )
+
         }
+
     )
 
 
 # ============================================================
-# PAGINA WEB
+# HTML
 # ============================================================
 
 HTML_PAGE = r"""
 <!DOCTYPE html>
+
 <html lang="es">
 
 <head>
@@ -983,145 +1650,204 @@ HTML_PAGE = r"""
 
 <meta
     name="theme-color"
-    content="#070b14"
+    content="#060a13"
 >
 
-<title>Lya AI</title>
+<title>
+    Lya AI
+</title>
+
 
 <style>
 
-/* =========================================================
-   RESET
-   ========================================================= */
 
 * {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+
+    box-sizing:
+        border-box;
+
+    margin:
+        0;
+
+    padding:
+        0;
+
 }
 
 
-/* =========================================================
-   BODY
-   ========================================================= */
-
 body {
 
-    min-height: 100vh;
+    min-height:
+        100vh;
 
     background:
+
         radial-gradient(
+
             circle at top,
-            #17233d 0%,
-            #0b1020 38%,
-            #05070d 100%
+
+            #1b3158 0%,
+
+            #0b1221 42%,
+
+            #04060b 100%
+
         );
 
-    color: #ffffff;
+    color:
+        white;
 
     font-family:
         Arial,
         Helvetica,
         sans-serif;
 
-    display: flex;
+    display:
+        flex;
 
-    justify-content: center;
+    justify-content:
+        center;
 
-    align-items: center;
+    align-items:
+        center;
 
-    padding: 18px;
+    padding:
+        18px;
 
 }
 
-
-/* =========================================================
-   APP
-   ========================================================= */
 
 .app {
 
-    width: 100%;
+    width:
+        100%;
 
-    max-width: 900px;
+    max-width:
+        920px;
 
-    min-height: 90vh;
+    height:
+        92vh;
+
+    min-height:
+        600px;
+
+    background:
+        rgba(
+            8,
+            13,
+            25,
+            0.90
+        );
 
     border:
         1px solid
-        rgba(255,255,255,0.10);
+        rgba(
+            255,
+            255,
+            255,
+            0.10
+        );
 
-    background:
-        rgba(10,15,28,0.88);
+    border-radius:
+        28px;
 
-    backdrop-filter:
-        blur(18px);
+    overflow:
+        hidden;
 
-    border-radius: 28px;
+    display:
+        flex;
 
-    overflow: hidden;
+    flex-direction:
+        column;
 
     box-shadow:
+
         0 30px 90px
-        rgba(0,0,0,0.45);
-
-    display: flex;
-
-    flex-direction: column;
+        rgba(
+            0,
+            0,
+            0,
+            0.50
+        );
 
 }
 
 
-/* =========================================================
-   HEADER
-   ========================================================= */
-
 .header {
 
-    padding: 22px;
+    padding:
+        18px 20px;
 
     border-bottom:
         1px solid
-        rgba(255,255,255,0.08);
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
 
-    display: flex;
+    display:
+        flex;
 
-    align-items: center;
+    align-items:
+        center;
 
-    gap: 16px;
+    gap:
+        14px;
 
 }
 
 
 .logo {
 
-    width: 58px;
+    width:
+        54px;
 
-    height: 58px;
+    height:
+        54px;
 
-    border-radius: 50%;
+    border-radius:
+        50%;
 
-    display: flex;
+    display:
+        flex;
 
-    align-items: center;
+    align-items:
+        center;
 
-    justify-content: center;
+    justify-content:
+        center;
 
-    font-size: 27px;
+    font-size:
+        25px;
 
-    font-weight: bold;
+    font-weight:
+        bold;
 
     background:
+
         radial-gradient(
+
             circle,
-            #8be9ff,
-            #467bff 60%,
-            #182b70
+
+            #b3f1ff,
+
+            #579cff 55%,
+
+            #24367a
+
         );
 
     box-shadow:
-        0 0 35px
-        rgba(94,160,255,0.55);
+
+        0 0 32px
+        rgba(
+            93,
+            165,
+            255,
+            0.55
+        );
 
     animation:
         pulse 3s infinite;
@@ -1132,24 +1858,24 @@ body {
 @keyframes pulse {
 
     0% {
-        transform: scale(1);
-        box-shadow:
-            0 0 25px
-            rgba(94,160,255,0.35);
+
+        transform:
+            scale(1);
+
     }
 
     50% {
-        transform: scale(1.05);
-        box-shadow:
-            0 0 45px
-            rgba(94,160,255,0.65);
+
+        transform:
+            scale(1.05);
+
     }
 
     100% {
-        transform: scale(1);
-        box-shadow:
-            0 0 25px
-            rgba(94,160,255,0.35);
+
+        transform:
+            scale(1);
+
     }
 
 }
@@ -1157,151 +1883,236 @@ body {
 
 .header-info {
 
-    flex: 1;
+    flex:
+        1;
 
 }
 
 
 .header-info h1 {
 
-    font-size: 22px;
+    font-size:
+        21px;
 
-    margin-bottom: 5px;
+    margin-bottom:
+        4px;
 
 }
 
 
 .header-info p {
 
-    font-size: 13px;
+    font-size:
+        12px;
 
     color:
-        rgba(255,255,255,0.58);
+        rgba(
+            255,
+            255,
+            255,
+            0.55
+        );
 
 }
 
 
 .status {
 
-    font-size: 11px;
+    font-size:
+        10px;
 
-    letter-spacing: 1px;
+    letter-spacing:
+        0.8px;
 
-    color: #79ffb2;
+    color:
+        #78ffb0;
 
-}
+        }
 
 
-/* =========================================================
+        /* ========================================================
    CHAT
-   ========================================================= */
+   ======================================================== */
 
 .chat {
 
-    flex: 1;
+    flex:
+        1;
 
-    padding: 24px;
+    overflow-y:
+        auto;
 
-    overflow-y: auto;
+    padding:
+        20px;
 
-    display: flex;
+    display:
+        flex;
 
-    flex-direction: column;
+    flex-direction:
+        column;
 
-    gap: 15px;
+    gap:
+        14px;
 
 }
 
 
 .message {
 
-    max-width: 82%;
+    max-width:
+        84%;
 
-    padding: 14px 17px;
+    padding:
+        13px 16px;
 
-    border-radius: 18px;
+    border-radius:
+        18px;
 
-    line-height: 1.55;
+    line-height:
+        1.55;
 
-    font-size: 15px;
+    font-size:
+        14px;
 
-    white-space: pre-wrap;
+    white-space:
+        pre-wrap;
 
 }
 
 
 .message.lya {
 
-    align-self: flex-start;
+    align-self:
+        flex-start;
 
     background:
-        rgba(71,100,160,0.22);
+        rgba(
+            70,
+            103,
+            170,
+            0.22
+        );
 
     border:
         1px solid
-        rgba(130,170,255,0.12);
+        rgba(
+            140,
+            180,
+            255,
+            0.12
+        );
 
-    border-bottom-left-radius: 5px;
+    border-bottom-left-radius:
+        5px;
 
 }
 
 
 .message.kris {
 
-    align-self: flex-end;
+    align-self:
+        flex-end;
 
     background:
-        rgba(81,111,207,0.35);
+        rgba(
+            80,
+            112,
+            210,
+            0.34
+        );
 
     border:
         1px solid
-        rgba(120,160,255,0.16);
+        rgba(
+            140,
+            170,
+            255,
+            0.12
+        );
 
-    border-bottom-right-radius: 5px;
+    border-bottom-right-radius:
+        5px;
 
 }
 
 
-/* =========================================================
+/* ========================================================
+   IMAGE MESSAGE
+   ======================================================== */
+
+.image-message {
+
+    max-width:
+        260px;
+
+    max-height:
+        300px;
+
+    border-radius:
+        15px;
+
+    object-fit:
+        cover;
+
+    margin-top:
+        5px;
+
+}
+
+
+/* ========================================================
    THINKING
-   ========================================================= */
+   ======================================================== */
 
 .thinking {
 
-    display: none;
-
-    align-items: center;
-
-    gap: 7px;
-
-    color:
-        rgba(255,255,255,0.55);
-
-    font-size: 12px;
+    display:
+        none;
 
     padding:
-        0 24px
-        12px;
+        0 20px 10px;
+
+    align-items:
+        center;
+
+    gap:
+        6px;
+
+    color:
+        rgba(
+            255,
+            255,
+            255,
+            0.50
+        );
+
+    font-size:
+        10px;
 
 }
 
 
 .thinking.active {
 
-    display: flex;
+    display:
+        flex;
 
 }
 
 
 .dot {
 
-    width: 6px;
+    width:
+        5px;
 
-    height: 6px;
+    height:
+        5px;
 
-    border-radius: 50%;
+    border-radius:
+        50%;
 
-    background: #8bdcff;
+    background:
+        #82dcff;
 
     animation:
         thinking 1.2s infinite;
@@ -1327,9 +2138,12 @@ body {
 
 @keyframes thinking {
 
-    0%, 60%, 100% {
+    0%,
+    60%,
+    100% {
 
-        opacity: 0.25;
+        opacity:
+            0.25;
 
         transform:
             translateY(0);
@@ -1338,7 +2152,8 @@ body {
 
     30% {
 
-        opacity: 1;
+        opacity:
+            1;
 
         transform:
             translateY(-4px);
@@ -1348,50 +2163,179 @@ body {
 }
 
 
-/* =========================================================
-   INPUT AREA
-   ========================================================= */
+/* ========================================================
+   PREVIEW
+   ======================================================== */
 
-.input-area {
+.preview-area {
 
-    padding: 18px;
+    display:
+        none;
+
+    padding:
+        8px 18px;
 
     border-top:
         1px solid
-        rgba(255,255,255,0.08);
+        rgba(
+            255,
+            255,
+            255,
+            0.05
+        );
 
-    display: flex;
+}
 
-    gap: 10px;
+
+.preview-area.active {
+
+    display:
+        block;
+
+}
+
+
+.preview-wrapper {
+
+    position:
+        relative;
+
+    display:
+        inline-block;
+
+}
+
+
+.preview-image {
+
+    width:
+        90px;
+
+    height:
+        90px;
+
+    object-fit:
+        cover;
+
+    border-radius:
+        13px;
+
+    border:
+        1px solid
+        rgba(
+            255,
+            255,
+            255,
+            0.14
+        );
+
+}
+
+
+.remove-image {
+
+    position:
+        absolute;
+
+    top:
+        -7px;
+
+    right:
+        -7px;
+
+    width:
+        24px;
+
+    height:
+        24px;
+
+    border:
+        none;
+
+    border-radius:
+        50%;
+
+    background:
+        #e95a6d;
+
+    color:
+        white;
+
+    cursor:
+        pointer;
+
+}
+
+
+/* ========================================================
+   INPUT
+   ======================================================== */
+
+.input-area {
+
+    padding:
+        12px 15px;
+
+    border-top:
+        1px solid
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
+
+    display:
+        flex;
+
+    align-items:
+        flex-end;
+
+    gap:
+        8px;
 
 }
 
 
 .input {
 
-    flex: 1;
+    flex:
+        1;
 
-    border: none;
+    min-height:
+        48px;
 
-    outline: none;
+    max-height:
+        130px;
 
-    resize: none;
+    resize:
+        none;
 
-    min-height: 50px;
+    border:
+        none;
 
-    max-height: 130px;
+    outline:
+        none;
 
     padding:
-        14px 16px;
+        14px;
 
-    border-radius: 17px;
+    border-radius:
+        16px;
 
     background:
-        rgba(255,255,255,0.06);
+        rgba(
+            255,
+            255,
+            255,
+            0.06
+        );
 
-    color: #ffffff;
+    color:
+        white;
 
-    font-size: 15px;
+    font-size:
+        14px;
 
 }
 
@@ -1399,85 +2343,163 @@ body {
 .input::placeholder {
 
     color:
-        rgba(255,255,255,0.38);
+        rgba(
+            255,
+            255,
+            255,
+            0.35
+        );
+
+}
+
+
+/* ========================================================
+   BUTTONS
+   ======================================================== */
+
+.icon-button {
+
+    width:
+        48px;
+
+    min-width:
+        48px;
+
+    height:
+        48px;
+
+    border:
+        none;
+
+    border-radius:
+        15px;
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.08
+        );
+
+    color:
+        white;
+
+    font-size:
+        19px;
+
+    cursor:
+        pointer;
+
+}
+
+
+.icon-button:hover {
+
+    background:
+        rgba(
+            255,
+            255,
+            255,
+            0.14
+        );
 
 }
 
 
 .send {
 
-    width: 52px;
+    width:
+        50px;
 
-    min-width: 52px;
+    min-width:
+        50px;
 
-    border: none;
+    height:
+        50px;
 
-    border-radius: 16px;
+    border:
+        none;
+
+    border-radius:
+        16px;
 
     background:
+
         linear-gradient(
+
             135deg,
+
             #5c9cff,
-            #766cff
+
+            #756cff
+
         );
 
-    color: white;
+    color:
+        white;
 
-    font-size: 21px;
+    font-size:
+        21px;
 
-    cursor: pointer;
-
-    transition:
-        transform 0.2s,
-        opacity 0.2s;
-
-}
-
-
-.send:hover {
-
-    transform:
-        translateY(-2px);
+    cursor:
+        pointer;
 
 }
 
 
-.send:disabled {
+button:disabled {
 
-    opacity: 0.45;
+    opacity:
+        0.45;
 
     cursor:
         not-allowed;
 
-    transform:
+}
+
+
+/* ========================================================
+   FILE INPUT
+   ======================================================== */
+
+#imageInput {
+
+    display:
         none;
 
 }
 
 
-/* =========================================================
+/* ========================================================
    FOOTER
-   ========================================================= */
+   ======================================================== */
 
 .footer {
 
     padding:
-        0 20px
-        15px;
+        0 15px 10px;
 
-    text-align: center;
-
-    font-size: 10px;
+    text-align:
+        center;
 
     color:
-        rgba(255,255,255,0.28);
+        rgba(
+            255,
+            255,
+            255,
+            0.25
+        );
+
+    font-size:
+        9px;
 
 }
 
 
-/* =========================================================
+/* ========================================================
    MOBILE
-   ========================================================= */
+   ======================================================== */
 
 @media (
     max-width: 600px
@@ -1485,60 +2507,68 @@ body {
 
     body {
 
-        padding: 0;
-
-        align-items:
-            stretch;
+        padding:
+            0;
 
     }
 
 
     .app {
 
-        min-height: 100vh;
+        height:
+            100vh;
 
-        border-radius: 0;
+        min-height:
+            100vh;
 
-        border: none;
+        border-radius:
+            0;
+
+        border:
+            none;
 
     }
 
 
     .header {
 
-        padding: 18px;
+        padding:
+            15px;
 
     }
 
 
     .logo {
 
-        width: 50px;
+        width:
+            48px;
 
-        height: 50px;
+        height:
+            48px;
 
     }
 
 
     .chat {
 
-        padding: 18px;
+        padding:
+            15px;
 
     }
 
 
     .message {
 
-        max-width: 90%;
-
-        font-size: 14px;
+        max-width:
+            91%;
 
     }
 
 
     .input-area {
 
-        padding: 12px;
+        padding:
+            9px;
 
     }
 
@@ -1555,116 +2585,164 @@ body {
 <div class="app">
 
 
-    <!-- HEADER -->
+<header class="header">
 
-    <header class="header">
-
-        <div class="logo">
-            L
-        </div>
-
-        <div class="header-info">
-
-            <h1>
-                Lya
-            </h1>
-
-            <p>
-                Tu asistente digital personal
-            </p>
-
-        </div>
-
-        <div
-            class="status"
-            id="status"
-        >
-            ● SYSTEM ONLINE
-        </div>
-
-    </header>
+    <div class="logo">
+        L
+    </div>
 
 
-    <!-- CHAT -->
+    <div class="header-info">
 
-    <main
-        class="chat"
-        id="chat"
-    >
+        <h1>
+            Lya
+        </h1>
 
-        <div
-            class="message lya"
-        >
-            Hola, Kris. Soy Lya.
-            <br><br>
-            Mi núcleo está conectado y listo.
-            Cuéntame qué hacemos hoy. 💙
-        </div>
-
-    </main>
-
-
-    <!-- THINKING -->
-
-    <div
-        class="thinking"
-        id="thinking"
-    >
-
-        <span>
-            ●
-        </span>
-
-        <span>
-            LYA ESTÁ PENSANDO
-        </span>
-
-        <span
-            class="dot"
-        ></span>
-
-        <span
-            class="dot"
-        ></span>
-
-        <span
-            class="dot"
-        ></span>
+        <p>
+            Tu asistente digital personal
+        </p>
 
     </div>
 
 
-    <!-- INPUT -->
+    <div
+        class="status"
+        id="status"
+    >
+        ● SYSTEM ONLINE
+    </div>
+
+</header>
+
+
+<main
+    class="chat"
+    id="chat"
+>
 
     <div
-        class="input-area"
+        class="message lya"
     >
 
-        <textarea
-            id="input"
-            class="input"
-            placeholder="Habla con Lya..."
-            rows="1"
-        ></textarea>
+        Hola, Kris. Soy Lya. 💙
+
+        <br><br>
+
+        Ahora también tengo ojos.
+
+        <br><br>
+
+        Puedes enviarme una imagen
+        y preguntarme qué veo.
+
+    </div>
+
+</main>
+
+
+<div
+    class="thinking"
+    id="thinking"
+>
+
+    <span>
+        ●
+    </span>
+
+    <span>
+        LYA ESTÁ ANALIZANDO
+    </span>
+
+    <span
+        class="dot"
+    ></span>
+
+    <span
+        class="dot"
+    ></span>
+
+    <span
+        class="dot"
+    ></span>
+
+</div>
+
+
+<div
+    class="preview-area"
+    id="previewArea"
+>
+
+    <div
+        class="preview-wrapper"
+    >
+
+        <img
+            id="previewImage"
+            class="preview-image"
+            alt="Vista previa"
+        >
 
         <button
-            id="send"
-            class="send"
+            id="removeImage"
+            class="remove-image"
             type="button"
         >
-            ↑
+            ×
         </button>
 
     </div>
 
+</div>
 
-    <!-- FOOTER -->
 
-    <div
-        class="footer"
+<div
+    class="input-area"
+>
+
+    <input
+        id="imageInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
     >
-        Lya AI · v0.6.0
-    </div>
+
+
+    <button
+        id="imageButton"
+        class="icon-button"
+        type="button"
+        title="Enviar imagen"
+    >
+        📷
+    </button>
+
+
+    <textarea
+        id="input"
+        class="input"
+        placeholder="Habla con Lya..."
+        rows="1"
+    ></textarea>
+
+
+    <button
+        id="send"
+        class="send"
+        type="button"
+    >
+        ↑
+    </button>
+
+</div>
+
+
+<div
+    class="footer"
+>
+
+    Lya AI · v0.7.0 · Vision Online
+
+</div>
 
 
 </div>
@@ -1672,29 +2750,34 @@ body {
 
 <script>
 
-/* =========================================================
+
+/* ========================================================
    ELEMENTOS
-   ========================================================= */
+   ======================================================== */
 
 const chat =
     document.getElementById(
         "chat"
     );
 
+
 const input =
     document.getElementById(
         "input"
     );
+
 
 const send =
     document.getElementById(
         "send"
     );
 
+
 const thinking =
     document.getElementById(
         "thinking"
     );
+
 
 const status =
     document.getElementById(
@@ -1702,9 +2785,43 @@ const status =
     );
 
 
-/* =========================================================
-   AGREGAR MENSAJE
-   ========================================================= */
+const imageInput =
+    document.getElementById(
+        "imageInput"
+    );
+
+
+const imageButton =
+    document.getElementById(
+        "imageButton"
+    );
+
+
+const previewArea =
+    document.getElementById(
+        "previewArea"
+    );
+
+
+const previewImage =
+    document.getElementById(
+        "previewImage"
+    );
+
+
+const removeImage =
+    document.getElementById(
+        "removeImage"
+    );
+
+
+let selectedImage =
+    null;
+
+
+/* ========================================================
+   MENSAJE
+   ======================================================== */
 
 function addMessage(
     text,
@@ -1716,25 +2833,84 @@ function addMessage(
             "div"
         );
 
+
     element.className =
         "message " + sender;
 
+
     element.textContent =
         text;
+
 
     chat.appendChild(
         element
     );
 
+
     scrollChat();
 
+
     return element;
+
 }
 
 
-/* =========================================================
+/* ========================================================
+   IMAGEN EN CHAT
+   ======================================================== */
+
+function addImageMessage(
+    file
+) {
+
+    const wrapper =
+        document.createElement(
+            "div"
+        );
+
+
+    wrapper.className =
+        "message kris";
+
+
+    const image =
+        document.createElement(
+            "img"
+        );
+
+
+    image.className =
+        "image-message";
+
+
+    image.src =
+        URL.createObjectURL(
+            file
+        );
+
+
+    image.alt =
+        "Imagen enviada a Lya";
+
+
+    wrapper.appendChild(
+        image
+    );
+
+
+    chat.appendChild(
+        wrapper
+    );
+
+
+    scrollChat();
+
+}
+
+
+/* ========================================================
    SCROLL
-   ========================================================= */
+   ======================================================== */
 
 function scrollChat() {
 
@@ -1744,12 +2920,13 @@ function scrollChat() {
 }
 
 
-/* =========================================================
+/* ========================================================
    ESTADO
-   ========================================================= */
+   ======================================================== */
 
 function setThinking(
-    active
+    active,
+    text
 ) {
 
     if (active) {
@@ -1758,14 +2935,21 @@ function setThinking(
             "active"
         );
 
+
         status.textContent =
-            "● LYA ESTÁ PENSANDO";
+            "● " +
+            (
+                text
+                || "LYA ESTÁ PENSANDO"
+            );
+
 
     } else {
 
         thinking.classList.remove(
             "active"
         );
+
 
         status.textContent =
             "● SYSTEM ONLINE";
@@ -1775,60 +2959,333 @@ function setThinking(
 }
 
 
-/* =========================================================
+/* ========================================================
+   IMAGEN SELECCIONADA
+   ======================================================== */
+
+imageButton.addEventListener(
+    "click",
+    function() {
+
+        imageInput.click();
+
+    }
+);
+
+
+/* ========================================================
+   CAMBIO DE IMAGEN
+   ======================================================== */
+
+imageInput.addEventListener(
+    "change",
+    function() {
+
+        const file =
+            imageInput.files[0];
+
+
+        if (!file) {
+
+            return;
+
+        }
+
+
+        if (
+            !file.type.startsWith(
+                "image/"
+            )
+        ) {
+
+            alert(
+                "Selecciona una imagen."
+            );
+
+            imageInput.value =
+                "";
+
+            return;
+
+        }
+
+
+        const maxSize =
+            15 * 1024 * 1024;
+
+
+        if (
+            file.size > maxSize
+        ) {
+
+            alert(
+                "La imagen debe pesar menos de 15 MB."
+            );
+
+            imageInput.value =
+                "";
+
+            return;
+
+        }
+
+
+        selectedImage =
+            file;
+
+
+        previewImage.src =
+            URL.createObjectURL(
+                file
+            );
+
+
+        previewArea.classList.add(
+            "active"
+        );
+
+
+        input.focus();
+
+    }
+);
+
+
+/* ========================================================
+   QUITAR IMAGEN
+   ======================================================== */
+
+removeImage.addEventListener(
+    "click",
+    function() {
+
+        selectedImage =
+            null;
+
+
+        imageInput.value =
+            "";
+
+
+        previewImage.src =
+            "";
+
+
+        previewArea.classList.remove(
+            "active"
+        );
+
+    }
+);
+
+
+/* ========================================================
    ENVIAR
-   ========================================================= */
+   ======================================================== */
 
 async function sendMessage() {
 
     const message =
         input.value.trim();
 
-    if (!message) {
+
+    if (
+        !message
+        &&
+        !selectedImage
+    ) {
+
         return;
+
     }
 
-    addMessage(
-        message,
-        "kris"
-    );
 
-    input.value = "";
+    send.disabled =
+        true;
 
-    send.disabled = true;
+    imageButton.disabled =
+        true;
 
-    input.disabled = true;
+    input.disabled =
+        true;
 
-    setThinking(
-        true
-    );
 
     try {
 
-        await streamMessage(
-            message
-        );
+
+        /* ================================================
+           VISION
+           ================================================ */
+
+        if (selectedImage) {
+
+
+            const file =
+                selectedImage;
+
+
+            addImageMessage(
+                file
+            );
+
+
+            const prompt =
+                message
+                ||
+                "Describe esta imagen con detalle.";
+
+
+            input.value =
+                "";
+
+
+            selectedImage =
+                null;
+
+
+            imageInput.value =
+                "";
+
+
+            previewImage.src =
+                "";
+
+
+            previewArea.classList.remove(
+                "active"
+            );
+
+
+            setThinking(
+                true,
+                "LYA ESTÁ ANALIZANDO"
+            );
+
+
+            const formData =
+                new FormData();
+
+
+            formData.append(
+                "message",
+                prompt
+            );
+
+
+            formData.append(
+                "image",
+                file
+            );
+
+
+            const response =
+                await fetch(
+                    "/vision",
+                    {
+                        method:
+                            "POST",
+
+                        body:
+                            formData
+                    }
+                );
+
+
+            const data =
+                await response.json();
+
+
+            if (
+                !response.ok
+                ||
+                !data.success
+            ) {
+
+                throw new Error(
+                    data.response
+                    ||
+                    "No se pudo analizar la imagen."
+                );
+
+            }
+
+
+            addMessage(
+                data.response,
+                "lya"
+            );
+
+
+        }
+
+
+        /* ================================================
+           CHAT NORMAL
+           ================================================ */
+
+        else {
+
+
+            addMessage(
+                message,
+                "kris"
+            );
+
+
+            input.value =
+                "";
+
+
+            setThinking(
+                true,
+                "LYA ESTÁ PENSANDO"
+            );
+
+
+            await streamMessage(
+                message
+            );
+
+        }
+
 
     } catch (error) {
+
 
         console.error(
             error
         );
 
+
         addMessage(
-            "No pude completar la conexión con mi núcleo.",
+            (
+                error.message
+                ||
+                "No pude completar la solicitud."
+            ),
             "lya"
         );
 
+
     } finally {
 
-        send.disabled = false;
 
-        input.disabled = false;
+        send.disabled =
+            false;
+
+
+        imageButton.disabled =
+            false;
+
+
+        input.disabled =
+            false;
+
 
         setThinking(
             false
         );
+
 
         input.focus();
 
@@ -1837,42 +3294,52 @@ async function sendMessage() {
 }
 
 
-/* =========================================================
-   STREAMING
-   ========================================================= */
+/* ========================================================
+   STREAMING TEXTO
+   ======================================================== */
 
 async function streamMessage(
     message
 ) {
 
+
     status.textContent =
         "● LYA ESTÁ RESPONDIENDO";
 
+
     const response =
         await fetch(
+
             "/chat/stream",
+
             {
-                method: "POST",
 
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
+                method:
+                    "POST",
 
-                body: JSON.stringify(
+                headers:
                     {
-                        message:
-                            message
-                    }
-                )
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                body:
+                    JSON.stringify(
+                        {
+                            message:
+                                message
+                        }
+                    )
+
             }
+
         );
 
 
     if (!response.ok) {
 
         throw new Error(
-            "HTTP " +
+            "Error HTTP " +
             response.status
         );
 
@@ -1882,7 +3349,7 @@ async function streamMessage(
     if (!response.body) {
 
         throw new Error(
-            "Streaming no disponible"
+            "Streaming no disponible."
         );
 
     }
@@ -1891,38 +3358,45 @@ async function streamMessage(
     const reader =
         response.body.getReader();
 
+
     const decoder =
         new TextDecoder(
             "utf-8"
         );
 
 
-    let buffer = "";
+    let buffer =
+        "";
 
-    let currentMessage = null;
 
-    let fullText = "";
+    let currentMessage =
+        null;
+
+
+    let fullText =
+        "";
 
 
     while (true) {
 
-        const {
-            value,
-            done
-        } =
+
+        const result =
             await reader.read();
 
 
-        if (done) {
+        if (result.done) {
+
             break;
+
         }
 
 
         buffer +=
             decoder.decode(
-                value,
+                result.value,
                 {
-                    stream: true
+                    stream:
+                        true
                 }
             );
 
@@ -1942,12 +3416,15 @@ async function streamMessage(
             of events
         ) {
 
+
             if (
                 !event.startsWith(
                     "data: "
                 )
             ) {
+
                 continue;
+
             }
 
 
@@ -1974,26 +3451,26 @@ async function streamMessage(
             }
 
 
-            /* =============================================
-               TEXTO
-               ============================================= */
-
             if (
                 data.type
                 === "text"
             ) {
 
+
                 if (
                     !currentMessage
                 ) {
+
 
                     currentMessage =
                         document.createElement(
                             "div"
                         );
 
+
                     currentMessage.className =
                         "message lya";
+
 
                     chat.appendChild(
                         currentMessage
@@ -2005,34 +3482,36 @@ async function streamMessage(
                 fullText +=
                     data.text;
 
+
                 currentMessage.textContent =
                     fullText;
+
 
                 scrollChat();
 
             }
 
 
-            /* =============================================
-               ERROR
-               ============================================= */
-
             else if (
                 data.type
                 === "error"
             ) {
 
+
                 if (
                     !currentMessage
                 ) {
+
 
                     currentMessage =
                         document.createElement(
                             "div"
                         );
 
+
                     currentMessage.className =
                         "message lya";
+
 
                     chat.appendChild(
                         currentMessage
@@ -2044,19 +3523,17 @@ async function streamMessage(
                 currentMessage.textContent =
                     data.message;
 
+
                 scrollChat();
 
             }
 
 
-            /* =============================================
-               FINAL
-               ============================================= */
-
             else if (
                 data.type
                 === "done"
             ) {
+
 
                 status.textContent =
                     "● SYSTEM ONLINE";
@@ -2070,18 +3547,22 @@ async function streamMessage(
 }
 
 
-/* =========================================================
+/* ========================================================
    ENTER
-   ========================================================= */
+   ======================================================== */
 
 input.addEventListener(
     "keydown",
     function(event) {
 
         if (
+
             event.key === "Enter"
+
             &&
+
             !event.shiftKey
+
         ) {
 
             event.preventDefault();
@@ -2094,9 +3575,9 @@ input.addEventListener(
 );
 
 
-/* =========================================================
-   BOTON
-   ========================================================= */
+/* ========================================================
+   SEND BUTTON
+   ======================================================== */
 
 send.addEventListener(
     "click",
@@ -2104,9 +3585,9 @@ send.addEventListener(
 );
 
 
-/* =========================================================
-   AUTO-RESIZE
-   ========================================================= */
+/* ========================================================
+   AUTO RESIZE
+   ======================================================== */
 
 input.addEventListener(
     "input",
@@ -2115,23 +3596,26 @@ input.addEventListener(
         input.style.height =
             "auto";
 
+
         input.style.height =
             Math.min(
                 input.scrollHeight,
                 130
-            ) + "px";
+            )
+            + "px";
 
     }
 );
 
 
-/* =========================================================
-   INICIO
-   ========================================================= */
+/* ========================================================
+   START
+   ======================================================== */
 
 input.focus();
 
 scrollChat();
+
 
 </script>
 
@@ -2143,7 +3627,7 @@ scrollChat();
 
 
 # ============================================================
-# ARRANQUE LOCAL
+# LOCAL START
 # ============================================================
 
 if __name__ == "__main__":
@@ -2151,12 +3635,16 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
+
         app,
+
         host="0.0.0.0",
+
         port=int(
             os.getenv(
                 "PORT",
                 "8000"
             )
         )
-)
+
+    )
