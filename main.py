@@ -573,11 +573,9 @@ def ask_gemini(message):
 
         )
 
-
-        previous_interaction_id =
-            interaction.id
-
-
+if event.event_type == "interaction.completed":
+    previous_interaction_id = event.interaction.id
+        
         response =
             interaction.output_text
 
