@@ -544,53 +544,48 @@ def ask_gemini(message):
 
     global previous_interaction_id
 
-
     if gemini_client is None:
-
         return (
             "Mi conexión con mi núcleo de inteligencia "
             "todavía no está disponible. "
             "Comprueba la configuración de Gemini en Render."
         )
 
-
     try:
 
         interaction = gemini_client.interactions.create(
-
             model=GEMINI_MODEL,
-
-            system_instruction=
-                LYA_SYSTEM_INSTRUCTION,
-
-            generation_config=
-                gemini_generation_config(),
-
+            system_instruction=LYA_SYSTEM_INSTRUCTION,
+            generation_config=gemini_generation_config(),
             input=message,
-
-            previous_interaction_id=
-                previous_interaction_id
-
+            previous_interaction_id=previous_interaction_id
         )
 
+        previous_interaction_id = interaction.id
 
-if event.event_type == "interaction.completed":
-    previous_interaction_id = event.interaction.id
-    response = event.interaction.output_text
-
+        response = interaction.output_text
 
         if not response:
 
-            print(
-                "GEMINI ERROR: respuesta vacía"
-            )
+            print("GEMINI ERROR: respuesta vacía")
 
             return (
                 "Mi núcleo recibió la solicitud, "
                 "pero no produjo una respuesta de texto."
             )
 
+        return response
 
+    except Exception as error:
+
+        print(f"GEMINI ERROR: {error}")
+
+        return (
+            "Tuve un problema al comunicarme con mi núcleo de inteligencia. "
+            "Puedes intentarlo nuevamente."
+        )
+
+        
         print(
             "GEMINI OK:",
             interaction.id
