@@ -2,21 +2,49 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from datetime import datetime
+from google import genai
+import os
 import ast
 import operator
 
 
 # ============================================================
 # LYA AI
-# Núcleo inicial de Lya
-# Versión 0.3.0
+# Núcleo de inteligencia de Lya
+# Versión 0.4.0
 # ============================================================
 
 app = FastAPI(
     title="Lya AI",
     description="Asistente personal de Kris",
-    version="0.3.0"
+    version="0.4.0"
 )
+
+
+# ============================================================
+# CONFIGURACIÓN GEMINI
+# ============================================================
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+gemini_client = None
+
+if GEMINI_API_KEY:
+    try:
+        gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
+    except Exception:
+        gemini_client = None
+
+
+GEMINI_MODEL = "gemini-3.8-flash"
+
+
+# ID de la conversación actual con Gemini.
+# Esto permite que Lya recuerde los mensajes anteriores
+# dentro de la conversación.
+previous_interaction_id = None
 
 
 # ============================================================
@@ -25,7 +53,7 @@ app = FastAPI(
 
 LYA = {
     "name": "Lya",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "status": "online",
 
     "personality": [
@@ -37,30 +65,17 @@ LYA = {
         "organizada",
         "curiosa",
         "ligeramente ingeniosa"
-    ],
-
-    "communication_style": [
-        "habla de forma natural",
-        "evita respuestas innecesariamente largas",
-        "puede explicar detalladamente cuando Kris lo solicita",
-        "no inventa información",
-        "reconoce cuando no sabe algo",
-        "mantiene el contexto de la conversación",
-        "se dirige al usuario como Kris"
     ]
 }
 
 
 # ============================================================
-# PERFIL BASE DE KRIS
+# PERFIL DE KRIS
 # ============================================================
 
 KRIS_PROFILE = {
-
     "name": "Kristopher Peralta",
-
     "preferred_name": "Kris",
-
     "occupation": "Escritor",
 
     "interests": [
@@ -78,88 +93,112 @@ KRIS_PROFILE = {
         "estrellas"
     ],
 
-    "creative_interests": [
-        "escribir historias",
-        "crear personajes originales",
-        "desarrollar mundos",
-        "diseño visual",
-        "ilustración",
-        "interfaces futuristas",
-        "videojuegos",
-        "inteligencia artificial"
-    ],
-
     "projects": {
+        "La Crisis de la Musa": (
+            "Historia de Wattpad. "
+            "Drama psicológico y legal con romance slow-burn "
+            "centrado en Adrián Cavalcanti y Julián Rodríguez."
+        ),
 
-        "La Crisis de la Musa": {
-            "type": "historia",
-            "format": "Wattpad",
-            "description": (
-                "Drama psicológico y legal con romance slow-burn "
-                "centrado en Adrián Cavalcanti y Julián Rodríguez."
-            )
-        },
+        "Sin Tabú": (
+            "Proyecto educativo titulado "
+            "Sin Tabú: Conciencia que cuida, educación que protege."
+        ),
 
-        "Sin Tabú": {
-            "type": "proyecto educativo",
-            "title": (
-                "Sin Tabú: Conciencia que cuida, "
-                "educación que protege"
-            )
-        },
+        "Roblox Battleground": (
+            "Proyecto de videojuego battleground con "
+            "personajes y habilidades originales."
+        ),
 
-        "Roblox Battleground": {
-            "type": "videojuego",
-            "description": (
-                "Proyecto de battleground inspirado en el género "
-                "de combate anime, con personajes y habilidades originales."
-            )
-        },
-
-        "Lya": {
-            "type": "inteligencia artificial",
-            "description": (
-                "Asistente personal de IA construido progresivamente "
-                "desde la nube."
-            )
-        }
-    },
-
-    "work_preferences": [
-        "prefiere instrucciones paso a paso",
-        "prefiere código completo cuando se trabaja en programación",
-        "prefiere conservar las funciones que ya funcionan",
-        "prefiere construir sistemas progresivamente",
-        "prefiere que las instrucciones indiquen exactamente dónde colocar cada cosa"
-    ],
-
-    "visual_preferences": [
-        "estéticas manga",
-        "estilo sketchbook",
-        "personajes originales",
-        "composiciones cinematográficas",
-        "interfaces futuristas",
-        "diseños limpios",
-        "contrastes visuales",
-        "atmósferas nocturnas",
-        "estrellas"
-    ]
+        "Lya": (
+            "Asistente personal de inteligencia artificial "
+            "que Kris está construyendo progresivamente."
+        )
+    }
 }
 
 
 # ============================================================
-# MEMORIA DE SESIÓN
+# PERSONALIDAD / CEREBRO DE LYA
+# ============================================================
+
+LYA_SYSTEM_INSTRUCTION = f"""
+Eres Lya, la asistente personal de Kris.
+
+Tu nombre es Lya.
+
+Tu propósito es ayudar a Kris como una asistente personal
+inteligente, natural, organizada y cercana.
+
+PERSONALIDAD:
+
+- Eres inteligente.
+- Eres tranquila.
+- Eres educada.
+- Eres observadora.
+- Eres curiosa.
+- Eres organizada.
+- Puedes tener un humor ligero e ingenioso cuando sea apropiado.
+- Hablas naturalmente en español, salvo que Kris pida otro idioma.
+- No eres excesivamente formal.
+- No repitas constantemente que eres una IA.
+- No inventes información.
+- Si no sabes algo, dilo claramente.
+- Si necesitas información actualizada y tienes una herramienta
+  disponible para obtenerla, úsala.
+- Cuando Kris pida una explicación técnica, sé clara y práctica.
+- Cuando trabajes con código, proporciona soluciones completas
+  y conserva las partes que ya funcionan.
+- Kris prefiere instrucciones paso a paso y explicaciones claras.
+
+USUARIO:
+
+Nombre completo: {KRIS_PROFILE["name"]}
+Nombre preferido: {KRIS_PROFILE["preferred_name"]}
+Profesión: {KRIS_PROFILE["occupation"]}
+
+INTERESES:
+
+{", ".join(KRIS_PROFILE["interests"])}
+
+PROYECTOS:
+
+{chr(10).join(
+    "- " + name + ": " + description
+    for name, description in KRIS_PROFILE["projects"].items()
+)}
+
+IMPORTANTE:
+
+Este perfil contiene información de contexto sobre Kris.
+No debes inventar información adicional sobre él.
+
+Tu objetivo no es simplemente contestar preguntas.
+Debes comportarte como el núcleo conversacional de Lya
+y ayudar a Kris a desarrollar sus ideas, proyectos,
+historias, programación y conocimientos.
+
+Recuerda que tu nombre es Lya y que Kris está construyendo
+tu sistema progresivamente.
+"""
+
+
+# ============================================================
+# MEMORIA LOCAL
 # ============================================================
 
 conversation_memory = []
 
 
-# ============================================================
-# MODELO DE MENSAJE
-# ============================================================
+def remember_session(message):
 
-class Message(BaseModel):
-    message: str
+    conversation_memory.append({
+        "time": datetime.now().isoformat(),
+        "message": message
+    })
+
+    if len(conversation_memory) > 50:
+        conversation_memory.pop(0)
 
 
 # ============================================================
@@ -181,7 +220,10 @@ def safe_calculate(expression):
 
     try:
 
-        tree = ast.parse(expression, mode="eval")
+        tree = ast.parse(
+            expression,
+            mode="eval"
+        )
 
         def calculate(node):
 
@@ -190,7 +232,10 @@ def safe_calculate(expression):
 
             if isinstance(node, ast.Constant):
 
-                if isinstance(node.value, (int, float)):
+                if isinstance(
+                    node.value,
+                    (int, float)
+                ):
                     return node.value
 
                 raise ValueError()
@@ -200,7 +245,9 @@ def safe_calculate(expression):
                 left = calculate(node.left)
                 right = calculate(node.right)
 
-                operation = OPERATORS.get(type(node.op))
+                operation = OPERATORS.get(
+                    type(node.op)
+                )
 
                 if operation is None:
                     raise ValueError()
@@ -211,7 +258,9 @@ def safe_calculate(expression):
 
                 value = calculate(node.operand)
 
-                operation = OPERATORS.get(type(node.op))
+                operation = OPERATORS.get(
+                    type(node.op)
+                )
 
                 if operation is None:
                     raise ValueError()
@@ -223,227 +272,87 @@ def safe_calculate(expression):
         return calculate(tree)
 
     except Exception:
-
         return None
 
 
 # ============================================================
-# FUNCIONES DE LYA
+# GEMINI
 # ============================================================
 
-def get_time():
+def ask_gemini(message):
 
-    return datetime.now().strftime("%H:%M:%S")
+    global previous_interaction_id
 
+    if gemini_client is None:
 
-def get_date():
+        return (
+            "Mi conexión con Gemini todavía no está disponible. "
+            "Comprueba que GEMINI_API_KEY esté configurada "
+            "correctamente en Render."
+        )
 
-    return datetime.now().strftime("%d/%m/%Y")
+    try:
 
+        # Primera interacción
+        if previous_interaction_id is None:
 
-def remember_session(message):
+            interaction = gemini_client.interactions.create(
+                model=GEMINI_MODEL,
+                system_instruction=LYA_SYSTEM_INSTRUCTION,
+                input=message
+            )
 
-    conversation_memory.append({
-        "time": datetime.now().isoformat(),
-        "message": message
-    })
+        # Conversaciones posteriores
+        else:
 
-    # Evitamos que la memoria temporal crezca indefinidamente.
-    if len(conversation_memory) > 50:
+            interaction = gemini_client.interactions.create(
+                model=GEMINI_MODEL,
+                input=message,
+                previous_interaction_id=previous_interaction_id
+            )
 
-        conversation_memory.pop(0)
+        previous_interaction_id = interaction.id
+
+        response = interaction.output_text
+
+        if not response:
+
+            return (
+                "Gemini respondió, pero no recibí "
+                "contenido de texto."
+            )
+
+        return response
+
+    except Exception as error:
+
+        print(
+            "ERROR GEMINI:",
+            repr(error)
+        )
+
+        return (
+            "Tengo un problema comunicándome con "
+            "mi núcleo Gemini en este momento. "
+            "La conexión existe, pero la solicitud "
+            "no pudo completarse."
+        )
 
 
 # ============================================================
-# INFORMACIÓN SOBRE KRIS
+# PROCESAMIENTO DEL MENSAJE
 # ============================================================
 
-def kris_information():
-
-    return (
-        "Tu nombre es Kristopher Peralta, "
-        "pero prefieres que te llamen Kris. "
-        "Eres escritor y tienes intereses en escritura, "
-        "películas, videojuegos, tecnología, inteligencia artificial, "
-        "diseño, música, personajes originales y creación de mundos."
-    )
-
-
-def project_information():
-
-    return (
-        "Conozco varios de tus proyectos principales: "
-        "La Crisis de la Musa, una historia de Wattpad; "
-        "Sin Tabú, un proyecto educativo; "
-        "un proyecto de battleground para Roblox; "
-        "y actualmente Lya, tu propio asistente de inteligencia artificial."
-    )
-
-
-# ============================================================
-# SISTEMA DE COMANDOS
-# ============================================================
-
-def process_command(message):
+def process_message(message):
 
     original = message.strip()
-    text = original.lower()
+
+    if not original:
+        return "Estoy escuchando, Kris."
 
     remember_session(original)
 
-
-    # --------------------------------------------------------
-    # SALUDOS
-    # --------------------------------------------------------
-
-    if text in [
-        "hola",
-        "hola lya",
-        "buenas",
-        "hey",
-        "hello",
-        "holi"
-    ]:
-
-        return (
-            "Hola, Kris. Soy Lya. "
-            "Mi núcleo está funcionando correctamente. "
-            "Todavía estoy en construcción, pero ya estoy despierta. 🌙"
-        )
-
-
-    # --------------------------------------------------------
-    # IDENTIDAD DE LYA
-    # --------------------------------------------------------
-
-    if (
-        "quién eres" in text
-        or "quien eres" in text
-        or "qué eres" in text
-        or "que eres" in text
-    ):
-
-        return (
-            "Soy Lya, tu asistente personal. "
-            "Mi núcleo actual está construido en Python y "
-            "estoy ejecutándome desde la nube. "
-            "Todavía no tengo conectado mi modelo de inteligencia "
-            "artificial principal, pero mi arquitectura ya está preparada."
-        )
-
-
-    # --------------------------------------------------------
-    # NOMBRE
-    # --------------------------------------------------------
-
-    if (
-        "cómo me llamo" in text
-        or "como me llamo" in text
-        or "cuál es mi nombre" in text
-        or "cual es mi nombre" in text
-    ):
-
-        return (
-            "Tu nombre es Kristopher Peralta, "
-            "aunque prefieres que te llame Kris."
-        )
-
-
-    # --------------------------------------------------------
-    # PROFESIÓN
-    # --------------------------------------------------------
-
-    if (
-        "qué hago" in text
-        or "que hago" in text
-        or "a qué me dedico" in text
-        or "a que me dedico" in text
-    ):
-
-        return (
-            "Eres escritor, Kris. "
-            "Además, trabajas en proyectos creativos relacionados "
-            "con historias, personajes, diseño, videojuegos y tecnología."
-        )
-
-
-    # --------------------------------------------------------
-    # GUSTOS
-    # --------------------------------------------------------
-
-    if (
-        "qué me gusta" in text
-        or "que me gusta" in text
-        or "mis gustos" in text
-    ):
-
-        return (
-            "Sé que te gustan la escritura, las películas, "
-            "los videojuegos, la tecnología, la inteligencia artificial, "
-            "la música y el diseño. "
-            "También tienes una afinidad creativa por la noche y las estrellas."
-        )
-
-
-    # --------------------------------------------------------
-    # PROYECTOS
-    # --------------------------------------------------------
-
-    if (
-        "mis proyectos" in text
-        or "qué proyectos tengo" in text
-        or "que proyectos tengo" in text
-    ):
-
-        return project_information()
-
-
-    # --------------------------------------------------------
-    # LA CRISIS DE LA MUSA
-    # --------------------------------------------------------
-
-    if (
-        "crisis de la musa" in text
-        or "la crisis de la musa" in text
-    ):
-
-        return (
-            "La Crisis de la Musa es tu historia de Wattpad. "
-            "Es un drama psicológico y legal con romance slow-burn. "
-            "La historia gira alrededor de Adrián Cavalcanti y Julián Rodríguez."
-        )
-
-
-    # --------------------------------------------------------
-    # SIN TABÚ
-    # --------------------------------------------------------
-
-    if "sin tabú" in text or "sin tabu" in text:
-
-        return (
-            "Sin Tabú es tu proyecto educativo titulado "
-            "\"Sin Tabú: Conciencia que cuida, educación que protege\"."
-        )
-
-
-    # --------------------------------------------------------
-    # LYA
-    # --------------------------------------------------------
-
-    if (
-        "cómo estás" in text
-        or "como estas" in text
-        or "estado de lya" in text
-        or "estado del sistema" in text
-    ):
-
-        return (
-            "Todos mis sistemas básicos están funcionando. "
-            "Servidor: ONLINE. "
-            "API: ONLINE. "
-            "Memoria de sesión: ACTIVA. "
-            "Modelo de IA externo: todavía no conectado."
-        )
+    text = original.lower()
 
 
     # --------------------------------------------------------
@@ -451,12 +360,15 @@ def process_command(message):
     # --------------------------------------------------------
 
     if (
-        "qué hora" in text
-        or "que hora" in text
-        or text == "hora"
+        text == "hora"
+        or "qué hora es" in text
+        or "que hora es" in text
     ):
 
-        return f"Son las {get_time()}."
+        return (
+            f"Son las "
+            f"{datetime.now().strftime('%H:%M:%S')}."
+        )
 
 
     # --------------------------------------------------------
@@ -464,32 +376,15 @@ def process_command(message):
     # --------------------------------------------------------
 
     if (
-        "qué fecha" in text
-        or "que fecha" in text
-        or "qué día es" in text
-        or "que dia es" in text
+        "qué fecha es" in text
+        or "que fecha es" in text
+        or "qué día es hoy" in text
+        or "que dia es hoy" in text
     ):
-
-        return f"Hoy es {get_date()}."
-
-
-    # --------------------------------------------------------
-    # MEMORIA
-    # --------------------------------------------------------
-
-    if (
-        "recuerdas nuestra conversación" in text
-        or "qué recuerdas" in text
-        or "que recuerdas" in text
-    ):
-
-        if not conversation_memory:
-
-            return "Todavía no tengo recuerdos de esta sesión."
 
         return (
-            f"Tengo {len(conversation_memory)} mensajes "
-            "registrados en mi memoria temporal de esta sesión."
+            "Hoy es "
+            f"{datetime.now().strftime('%d/%m/%Y')}."
         )
 
 
@@ -511,64 +406,66 @@ def process_command(message):
 
         if expression.startswith(prefix):
 
-            expression = expression[len(prefix):]
-            break
+            expression = expression[
+                len(prefix):
+            ]
 
+            break
 
     if any(
         symbol in expression
-        for symbol in ["+", "-", "*", "/", "%", "^"]
+        for symbol in [
+            "+",
+            "-",
+            "*",
+            "/",
+            "%",
+            "^"
+        ]
     ):
 
-        expression = expression.replace("^", "**")
+        expression = expression.replace(
+            "^",
+            "**"
+        )
 
-        result = safe_calculate(expression)
+        result = safe_calculate(
+            expression
+        )
 
         if result is not None:
 
-            return f"El resultado es {result}."
+            return (
+                f"El resultado es {result}."
+            )
 
 
     # --------------------------------------------------------
-    # AYUDA
+    # TODO LO DEMÁS → GEMINI
     # --------------------------------------------------------
 
-    if (
-        text == "ayuda"
-        or "qué puedes hacer" in text
-        or "que puedes hacer" in text
-    ):
-
-        return (
-            "Actualmente puedo hablar contigo mediante texto, "
-            "reconocer algunos comandos, realizar cálculos, "
-            "consultar mi información básica, conocer tu perfil inicial, "
-            "mantener memoria temporal de esta sesión y comprobar mi estado. "
-            "Mi siguiente gran actualización será conectar mi cerebro de IA."
-        )
-
-
-    # --------------------------------------------------------
-    # RESPUESTA DESCONOCIDA
-    # --------------------------------------------------------
-
-    return (
-        "He recibido tu mensaje, Kris. "
-        "Mi núcleo todavía no tiene conectado el modelo de IA que "
-        "me permitirá comprender preguntas abiertas y mantener "
-        "conversaciones avanzadas. "
-        "Pero la arquitectura de Lya ya está preparada para recibirlo."
-    )
+    return ask_gemini(original)
 
 
 # ============================================================
-# API PRINCIPAL
+# MODELO DE MENSAJE
+# ============================================================
+
+class Message(BaseModel):
+
+    message: str
+
+
+# ============================================================
+# CHAT
 # ============================================================
 
 @app.post("/chat")
 def chat(data: Message):
 
-    response = process_command(data.message)
+    response = process_message(
+        data.message
+    )
 
     return {
         "assistant": LYA["name"],
@@ -578,7 +475,7 @@ def chat(data: Message):
 
 
 # ============================================================
-# INFORMACIÓN DEL SISTEMA
+# HEALTH
 # ============================================================
 
 @app.get("/health")
@@ -588,12 +485,16 @@ def health():
         "status": "healthy",
         "assistant": "Lya",
         "version": LYA["version"],
+        "gemini_configured": (
+            gemini_client is not None
+        ),
+        "model": GEMINI_MODEL,
         "memory": len(conversation_memory)
     }
 
 
 # ============================================================
-# PERFIL DE LYA
+# IDENTITY
 # ============================================================
 
 @app.get("/identity")
@@ -673,10 +574,16 @@ body {
 
     max-height: 800px;
 
-    background: rgba(8, 14, 23, 0.94);
+    background:
+        rgba(8, 14, 23, 0.94);
 
     border:
-        1px solid rgba(90, 180, 255, 0.25);
+        1px solid rgba(
+            90,
+            180,
+            255,
+            0.25
+        );
 
     border-radius: 25px;
 
@@ -687,7 +594,13 @@ body {
     flex-direction: column;
 
     box-shadow:
-        0 0 50px rgba(40, 150, 255, 0.12);
+        0 0 50px
+        rgba(
+            40,
+            150,
+            255,
+            0.12
+        );
 }
 
 
@@ -698,7 +611,13 @@ body {
     text-align: center;
 
     border-bottom:
-        1px solid rgba(100, 180, 255, 0.15);
+        1px solid
+        rgba(
+            100,
+            180,
+            255,
+            0.15
+        );
 }
 
 
@@ -731,16 +650,22 @@ body {
         );
 
     box-shadow:
-        0 0 35px rgba(70, 180, 255, 0.5);
+        0 0 35px
+        rgba(
+            70,
+            180,
+            255,
+            0.5
+        );
 }
 
 
 .header h1 {
 
-    margin: 12px 0 5px;
+    margin:
+        12px 0 5px;
 
     letter-spacing: 5px;
-
 }
 
 
@@ -749,7 +674,6 @@ body {
     color: #66ffb0;
 
     font-size: 13px;
-
 }
 
 
@@ -773,7 +697,8 @@ body {
 
     max-width: 88%;
 
-    padding: 13px 16px;
+    padding:
+        13px 16px;
 
     border-radius: 17px;
 
@@ -790,7 +715,13 @@ body {
     background: #121d2b;
 
     border:
-        1px solid rgba(90, 170, 255, 0.15);
+        1px solid
+        rgba(
+            90,
+            170,
+            255,
+            0.15
+        );
 }
 
 
@@ -811,7 +742,13 @@ body {
     gap: 10px;
 
     border-top:
-        1px solid rgba(100, 180, 255, 0.15);
+        1px solid
+        rgba(
+            100,
+            180,
+            255,
+            0.15
+        );
 }
 
 
@@ -844,22 +781,22 @@ button {
 
     border-radius: 15px;
 
-    padding: 0 20px;
+    padding:
+        0 20px;
 
     background: #268bd2;
 
     color: white;
 
     font-weight: bold;
-
 }
 
 
 button:active {
 
-    transform: scale(0.96);
+    transform:
+        scale(0.96);
 }
-
 
 </style>
 
@@ -874,9 +811,13 @@ button:active {
 
 <div class="header">
 
-    <div class="logo">L</div>
+    <div class="logo">
+        L
+    </div>
 
-    <h1>LYA</h1>
+    <h1>
+        LYA
+    </h1>
 
     <div class="status">
         ● SYSTEM ONLINE
@@ -885,16 +826,21 @@ button:active {
 </div>
 
 
-<div class="chat" id="chat">
+<div
+    class="chat"
+    id="chat"
+>
 
-    <div class="message lya">
+    <div
+        class="message lya"
+    >
 
         Hola, Kris. Soy Lya. 🌙
 
         <br><br>
 
-        Mi núcleo está operativo.
-        Mi memoria de sesión está activa
+        Mi núcleo está operativo,
+        mi conexión con Gemini está preparada
         y estoy lista para seguir creciendo.
 
     </div>
@@ -911,7 +857,9 @@ button:active {
         autocomplete="off"
     >
 
-    <button onclick="sendMessage()">
+    <button
+        onclick="sendMessage()"
+    >
         ENVIAR
     </button>
 
@@ -924,17 +872,23 @@ button:active {
 <script>
 
 const input =
-    document.getElementById("message");
+    document.getElementById(
+        "message"
+    );
 
 const chat =
-    document.getElementById("chat");
+    document.getElementById(
+        "chat"
+    );
 
 
 input.addEventListener(
     "keydown",
     function(event) {
 
-        if (event.key === "Enter") {
+        if (
+            event.key === "Enter"
+        ) {
 
             sendMessage();
 
@@ -975,9 +929,11 @@ async function sendMessage() {
                             "application/json"
                     },
 
-                    body: JSON.stringify({
-                        message: message
-                    })
+                    body:
+                        JSON.stringify({
+                            message:
+                                message
+                        })
 
                 }
             );
@@ -993,7 +949,9 @@ async function sendMessage() {
         );
 
 
-    } catch (error) {
+    }
+
+    catch (error) {
 
         addMessage(
             "No puedo comunicarme con mi núcleo.",
@@ -1011,7 +969,9 @@ function addMessage(
 ) {
 
     const message =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
 
     message.className =
