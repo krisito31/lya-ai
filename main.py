@@ -1267,6 +1267,41 @@ def generate_voice(text):
 
 
 # ============================================================
+# PRUEBA DE VOZ
+# ============================================================
+
+@app.post("/voice-test")
+def voice_test_endpoint(request: VoiceRequest):
+
+    if not request.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No se recibió texto."
+        )
+
+    audio = generate_voice(request.text)
+
+    if audio is None:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo generar el audio."
+        )
+
+    print(
+        f"VOICE TEST: WAV final = {len(audio)} bytes"
+    )
+
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": 'attachment; filename="lya_test.wav"',
+            "Content-Length": str(len(audio))
+        }
+    )
+
+
+# ============================================================
 # STREAMING
 # ============================================================
 
