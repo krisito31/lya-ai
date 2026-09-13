@@ -1267,19 +1267,22 @@ def generate_voice(text):
 
 
 # ============================================================
+# =========================================================
 # PRUEBA DE VOZ
 # ============================================================
 
 @app.post("/voice-test")
-def voice_test_endpoint(request: VoiceRequest):
+def voice_test_endpoint(request: dict):
 
-    if not request.text.strip():
+    text = request.get("text", "")
+
+    if not isinstance(text, str) or not text.strip():
         raise HTTPException(
             status_code=400,
             detail="No se recibió texto."
         )
 
-    audio = generate_voice(request.text)
+    audio = generate_voice(text)
 
     if audio is None:
         raise HTTPException(
