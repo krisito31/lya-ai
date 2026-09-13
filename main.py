@@ -1211,48 +1211,58 @@ completa a menos que Kris la solicite.
 
 def generate_voice(text):
     if not gemini_client:
+        print("VOICE: cliente Gemini no disponible")
         return None
 
     try:
-        stream = gemini_client.interactions.create(
+        interaction = gemini_client.interactions.create(
             model=GEMINI_VOICE_MODEL,
             input=text,
-            response_format={"type": "audio"},
+            response_format={
+                "type": "audio"
+            },
             generation_config={
                 "speech_config": [
                     {
                         "voice": "Kore"
                     }
                 ]
-            },
-            stream=True
+            }
         )
 
-        audio_data = bytearray()
-
-        for event in stream:
-            if event.event_type == "step.delta":
-                if event.delta.type == "audio":
-                    audio_chunk = base64.b64decode(event.delta.data)
-                    audio_data.extend(audio_chunk)
-
-        if not audio_data:
-            print("VOICE: no se recibió audio")
+        if not interaction.output_audio:
+            print("VOICE: Gemini no devolvió output_audio")
             return None
 
-        # Convertir el audio PCM recibido a WAV
+        audio_data = base64.b64decode(
+            interaction.output_audio.data
+        )
+
+        if not audio_data:
+            print("VOICE: output_audio está vacío")
+            return None
+
+        # El audio de Gemini TTS es PCM:
+        # mono, 24 kHz, 16 bits
         wav_buffer = io.BytesIO()
 
         with wave.open(wav_buffer, "wb") as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(24000)
-            wav_file.writeframes(bytes(audio_data))
+            wav_file.writeframes(audio_data)
 
-        return wav_buffer.getvalue()
+        wav_data = wav_buffer.getvalue()
+
+        print(
+            f"VOICE: audio generado correctamente "
+            f"({len(audio_data)} bytes PCM)"
+        )
+
+        return wav_data
 
     except Exception as e:
-        print("VOICE ERROR:", e)
+        print("VOICE ERROR:", repr(e))
         return None
 
 
