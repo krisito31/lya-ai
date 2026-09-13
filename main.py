@@ -44,6 +44,8 @@ import json
 import ast
 import operator
 import base64
+import io
+import wave
 from datetime import datetime
 from typing import Optional
 
@@ -71,9 +73,11 @@ from google import genai
 
 APP_NAME = "Lya"
 
-APP_VERSION = "0.7.0"
+APP_VERSION = "0.9.0"
 
 GEMINI_MODEL = "gemini-3.8-flash"
+
+GEMINI_VOICE_MODEL = "gemini-3.1-flash-tts-preview"
 
 GEMINI_THINKING_LEVEL = "medium"
 
@@ -205,7 +209,7 @@ LYA = {
 
     "audio": True,
 
-    "voice": False,
+    "voice": True,
 
     "persistent_memory": False
 
@@ -352,7 +356,33 @@ La capacidad auditiva actual funciona
 cuando Kris proporciona una grabación
 de audio.
 
-Todavía no tienes voz propia implementada.
+Ahora tienes capacidad auditiva y capacidad
+de generar voz mediante un sistema TTS.
+
+Puedes recibir grabaciones de audio proporcionadas
+por Kris y comprender su contenido.
+
+También puedes generar una respuesta hablada
+cuando el sistema de voz esté habilitado.
+
+Tu voz es una salida digital generada por IA.
+No afirmes que tienes una voz física propia.
+
+No tienes un micrófono permanentemente activo,
+ni una cámara permanentemente activa.
+
+Solo recibes audio o imágenes cuando Kris
+los proporciona mediante la aplicación.
+
+Cuando generes respuestas para voz:
+
+- Habla de forma natural.
+- Utiliza español por defecto.
+- Mantén un tono cálido, cercano y tranquilo.
+- Evita sonar excesivamente robótica.
+- No leas símbolos innecesarios.
+- No utilices formatos difíciles de interpretar
+  por un sistema de voz.
 
 Si Kris pregunta quién eres,
 explica que eres Lya.
@@ -1174,6 +1204,57 @@ completa a menos que Kris la solicite.
 
 
 # ============================================================
+# VOZ / TEXT TO SPEECH
+# ============================================================
+
+def generate_voice(text):
+    if not gemini_client:
+        return None
+
+    try:
+        stream = gemini_client.interactions.create(
+            model=GEMINI_VOICE_MODEL,
+            input=text,
+            response_format={"type": "audio"},
+            generation_config={
+                "speech_config": [
+                    {
+                        "voice": "Kore"
+                    }
+                ]
+            },
+            stream=True
+        )
+
+        audio_data = bytearray()
+
+        for event in stream:
+            if event.event_type == "step.delta":
+                if event.delta.type == "audio":
+                    audio_chunk = base64.b64decode(event.delta.data)
+                    audio_data.extend(audio_chunk)
+
+        if not audio_data:
+            print("VOICE: no se recibió audio")
+            return None
+
+        # Convertir el audio PCM recibido a WAV
+        wav_buffer = io.BytesIO()
+
+        with wave.open(wav_buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24000)
+            wav_file.writeframes(bytes(audio_data))
+
+        return wav_buffer.getvalue()
+
+    except Exception as e:
+        print("VOICE ERROR:", e)
+        return None
+
+
+# ============================================================
 # STREAMING
 # ============================================================
 
@@ -1792,6 +1873,40 @@ async def audio(
 
 
 # ============================================================
+# VOICE ENDPOINT
+# ============================================================
+
+class VoiceRequest(BaseModel):
+    text: str
+
+
+@app.post("/voice")
+def voice_endpoint(request: VoiceRequest):
+
+    if not request.text.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="No se recibió texto para convertir en voz."
+        )
+
+    audio = generate_voice(request.text)
+
+    if audio is None:
+        raise HTTPException(
+            status_code=500,
+            detail="No se pudo generar la voz."
+        )
+
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={
+            "Content-Disposition": "inline; filename=lya_voice.wav"
+        }
+    )
+
+
+# ============================================================
 # HEALTH
 # ============================================================
 
@@ -1832,7 +1947,7 @@ async def health():
                 True,
 
             "voice":
-                False,
+                True,
 
             "persistent_memory":
                 False
