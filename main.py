@@ -203,7 +203,7 @@ LYA = {
 
     "vision": True,
 
-    "audio": False,
+    "audio": True,
 
     "voice": False,
 
@@ -336,8 +336,23 @@ No afirmes que tienes cámara permanente.
 La capacidad de visión actual funciona cuando
 Kris proporciona una imagen.
 
-Todavía no tienes escucha por micrófono
-ni voz propia implementada.
+Ahora tienes capacidad auditiva.
+
+Puedes recibir grabaciones de audio
+proporcionadas por Kris.
+
+Puedes comprender el contenido hablado,
+identificar palabras, frases, preguntas,
+entonación y otros elementos que puedan
+estar presentes en el audio.
+
+No afirmes tener un micrófono permanente.
+
+La capacidad auditiva actual funciona
+cuando Kris proporciona una grabación
+de audio.
+
+Todavía no tienes voz propia implementada.
 
 Si Kris pregunta quién eres,
 explica que eres Lya.
@@ -992,6 +1007,173 @@ Responde en español.
 
 
 # ============================================================
+# AUDIO
+# ============================================================
+
+def analyze_audio(
+    audio_bytes,
+    mime_type,
+    message
+):
+
+    global previous_interaction_id
+
+    if gemini_client is None:
+
+        return (
+            "Mi núcleo de inteligencia "
+            "no está disponible."
+        )
+
+    if not audio_bytes:
+
+        return (
+            "No recibí ningún audio."
+        )
+
+    if not mime_type.startswith(
+        "audio/"
+    ):
+
+        return (
+            "El archivo recibido "
+            "no parece ser un audio."
+        )
+
+    # Limite de seguridad.
+    # Gemini permite audio inline pequeño.
+    max_audio_size = (
+        10 * 1024 * 1024
+    )
+
+    if len(audio_bytes) > max_audio_size:
+
+        return (
+            "El audio es demasiado grande. "
+            "Utiliza una grabación de menos "
+            "de 10 MB."
+        )
+
+    try:
+
+        audio_base64 = (
+            base64.b64encode(
+                audio_bytes
+            )
+            .decode("utf-8")
+        )
+
+        context = build_context(
+            message
+        )
+
+        audio_prompt = f"""
+Kris te ha enviado una grabación de audio.
+
+Esta es una entrada auditiva directa
+proporcionada por Kris.
+
+Contexto de conversación:
+
+{context}
+
+Instrucción de Kris:
+
+{message}
+
+Escucha y comprende cuidadosamente
+el contenido del audio.
+
+Identifica lo que Kris está diciendo
+y utiliza esa información para responder.
+
+Si Kris está haciendo una pregunta,
+respóndela directamente.
+
+Si el audio contiene una instrucción,
+comprende la intención antes de responder.
+
+No inventes palabras que no puedas
+comprender con suficiente confianza.
+
+Si el audio no puede entenderse
+correctamente, indícalo.
+
+Responde en español.
+
+No necesitas mostrar una transcripción
+completa a menos que Kris la solicite.
+"""
+
+        interaction = (
+            gemini_client
+            .interactions
+            .create(
+
+                model=GEMINI_MODEL,
+
+                system_instruction=
+                    LYA_SYSTEM_INSTRUCTION,
+
+                generation_config=
+                    gemini_generation_config(),
+
+                input=[
+
+                    {
+                        "type": "text",
+                        "text":
+                            audio_prompt
+                    },
+
+                    {
+                        "type": "audio",
+                        "data":
+                            audio_base64,
+                        "mime_type":
+                            mime_type
+                    }
+
+                ],
+
+                previous_interaction_id=
+                    previous_interaction_id
+
+            )
+        )
+
+        previous_interaction_id = (
+            interaction.id
+        )
+
+        response = (
+            interaction.output_text
+        )
+
+        if not response:
+
+            return (
+                "Pude recibir el audio, "
+                "pero no obtuve una respuesta "
+                "de mi núcleo."
+            )
+
+        return response
+
+    except Exception as error:
+
+        print(
+            f"AUDIO ERROR: {error}"
+        )
+
+        return (
+            "Pude recibir el audio, "
+            "pero ocurrió un problema "
+            "al analizarlo."
+        )
+
+
+# ============================================================
 # STREAMING
 # ============================================================
 
@@ -1519,6 +1701,97 @@ async def vision(
 
 
 # ============================================================
+# AUDIO ENDPOINT
+# ============================================================
+
+@app.post(
+    "/audio"
+)
+async def audio(
+    message: str = Form("Escucha este audio y responde."),
+    audio: UploadFile = File(...)
+):
+
+    try:
+
+        audio_bytes = (
+            await audio.read()
+        )
+
+        mime_type = (
+            audio.content_type
+            or "audio/webm"
+        )
+
+        response = analyze_audio(
+
+            audio_bytes,
+
+            mime_type,
+
+            message
+
+        )
+
+        save_local_message(
+            "user",
+            "[Audio] " + message
+        )
+
+        save_local_message(
+            "assistant",
+            response
+        )
+
+        return JSONResponse(
+
+            {
+                "success":
+                    True,
+
+                "response":
+                    response,
+
+                "assistant":
+                    "Lya",
+
+                "version":
+                    APP_VERSION,
+
+                "audio":
+                    True
+
+            }
+
+        )
+
+    except Exception as error:
+
+        print(
+            f"AUDIO ENDPOINT ERROR: {error}"
+        )
+
+        return JSONResponse(
+
+            {
+
+                "success":
+                    False,
+
+                "response":
+                    (
+                        "No pude procesar "
+                        "el audio."
+                    )
+
+            },
+
+            status_code=500
+
+        )
+
+
+# ============================================================
 # HEALTH
 # ============================================================
 
@@ -1556,7 +1829,7 @@ async def health():
                 True,
 
             "audio":
-                False,
+                True,
 
             "voice":
                 False,
@@ -2628,13 +2901,13 @@ button:disabled {
 
         <br><br>
 
-        Ahora también tengo ojos.
+        Ahora tengo ojos y oídos. 👁️🎧
 
-        <br><br>
+<br><br>
 
-        Puedes enviarme una imagen
-        y preguntarme qué veo.
-
+Puedes enviarme una imagen
+para que la analice o pulsar
+el micrófono para hablar conmigo.
     </div>
 
 </main>
@@ -2717,6 +2990,16 @@ button:disabled {
     </button>
 
 
+    <button
+    id="audioButton"
+    class="icon-button"
+    type="button"
+    title="Hablar con Lya"
+>
+    🎙️
+</button>
+
+
     <textarea
         id="input"
         class="input"
@@ -2740,7 +3023,7 @@ button:disabled {
     class="footer"
 >
 
-    Lya AI · v0.7.0 · Vision Online
+    Lya AI · v0.8.0 · Vision + Audio Online
 
 </div>
 
@@ -2817,6 +3100,329 @@ const removeImage =
 
 let selectedImage =
     null;
+
+
+/* ========================================================
+   AUDIO
+   ======================================================== */
+
+const audioButton =
+    document.getElementById(
+        "audioButton"
+    );
+
+let mediaRecorder =
+    null;
+
+let audioChunks =
+    [];
+
+let isRecording =
+    false;
+
+let audioStream =
+    null;
+
+
+/* ========================================================
+   GRABACION DE AUDIO
+   ======================================================== */
+
+async function toggleRecording() {
+
+    if (isRecording) {
+
+        stopRecording();
+
+        return;
+
+    }
+
+    try {
+
+        if (
+            !navigator.mediaDevices
+            ||
+            !navigator.mediaDevices.getUserMedia
+        ) {
+
+            alert(
+                "Tu navegador no permite "
+                + "acceso al micrófono."
+            );
+
+            return;
+
+        }
+
+        audioStream =
+            await navigator.mediaDevices
+                .getUserMedia({
+                    audio: true
+                });
+
+        audioChunks = [];
+
+        let mimeType =
+            "audio/webm;codecs=opus";
+
+        if (
+            !MediaRecorder
+                .isTypeSupported(
+                    mimeType
+                )
+        ) {
+
+            mimeType =
+                "audio/webm";
+
+        }
+
+        mediaRecorder =
+            new MediaRecorder(
+                audioStream,
+                {
+                    mimeType:
+                        mimeType
+                }
+            );
+
+        mediaRecorder.ondataavailable =
+            function(event) {
+
+                if (
+                    event.data
+                    &&
+                    event.data.size > 0
+                ) {
+
+                    audioChunks.push(
+                        event.data
+                    );
+
+                }
+
+            };
+
+        mediaRecorder.onstop =
+            async function() {
+
+                const audioBlob =
+                    new Blob(
+                        audioChunks,
+                        {
+                            type:
+                                mimeType
+                        }
+                    );
+
+                await sendAudio(
+                    audioBlob
+                );
+
+            };
+
+        mediaRecorder.start();
+
+        isRecording =
+            true;
+
+        audioButton.textContent =
+            "⏹️";
+
+        audioButton.title =
+            "Detener grabación";
+
+        audioButton.style.background =
+            "rgba(220, 70, 90, 0.55)";
+
+        setThinking(
+            true,
+            "LYA ESTÁ ESCUCHANDO"
+        );
+
+        status.textContent =
+            "● GRABANDO AUDIO";
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        alert(
+            "No pude acceder al micrófono."
+        );
+
+        isRecording =
+            false;
+
+    }
+
+}
+
+
+function stopRecording() {
+
+    if (
+        mediaRecorder
+        &&
+        mediaRecorder.state !==
+            "inactive"
+    ) {
+
+        mediaRecorder.stop();
+
+    }
+
+    if (audioStream) {
+
+        audioStream
+            .getTracks()
+            .forEach(
+                function(track) {
+
+                    track.stop();
+
+                }
+            );
+
+    }
+
+    isRecording =
+        false;
+
+    audioButton.textContent =
+        "🎙️";
+
+    audioButton.title =
+        "Hablar con Lya";
+
+    audioButton.style.background =
+        "";
+
+}
+
+
+async function sendAudio(
+    audioBlob
+) {
+
+    try {
+
+        send.disabled =
+            true;
+
+        imageButton.disabled =
+            true;
+
+        audioButton.disabled =
+            true;
+
+        input.disabled =
+            true;
+
+        addMessage(
+            "🎙️ Audio enviado a Lya",
+            "kris"
+        );
+
+        setThinking(
+            true,
+            "LYA ESTÁ ESCUCHANDO"
+        );
+
+        const formData =
+            new FormData();
+
+        formData.append(
+            "message",
+            "Escucha este audio y responde naturalmente a lo que Kris está diciendo."
+        );
+
+        formData.append(
+            "audio",
+            audioBlob,
+            "lya_audio.webm"
+        );
+
+        const response =
+            await fetch(
+                "/audio",
+                {
+                    method:
+                        "POST",
+
+                    body:
+                        formData
+                }
+            );
+
+        const data =
+            await response.json();
+
+        if (
+            !response.ok
+            ||
+            !data.success
+        ) {
+
+            throw new Error(
+                data.response
+                ||
+                "No pude procesar el audio."
+            );
+
+        }
+
+        addMessage(
+            data.response,
+            "lya"
+        );
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+        addMessage(
+            error.message
+            ||
+            "No pude completar "
+            + "la solicitud de audio.",
+            "lya"
+        );
+
+    } finally {
+
+        send.disabled =
+            false;
+
+        imageButton.disabled =
+            false;
+
+        audioButton.disabled =
+            false;
+
+        input.disabled =
+            false;
+
+        setThinking(
+            false
+        );
+
+        input.focus();
+
+    }
+
+}
+
+
+audioButton.addEventListener(
+    "click",
+    toggleRecording
+);
 
 
 /* ========================================================
