@@ -3292,6 +3292,9 @@ function unlockLyaAudio() {
                     lyaVoicePlayer.src =
                         "";
 
+                        lyaVoicePlayer.volume =
+    1;
+
                     lyaVoiceUnlocked =
                         true;
 
