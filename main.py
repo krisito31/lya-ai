@@ -3233,6 +3233,81 @@ const status =
     );
 
 
+    /* ========================================================
+   REPRODUCTOR DE VOZ DE LYA
+   ======================================================== */
+
+const lyaVoicePlayer =
+    new Audio();
+
+lyaVoicePlayer.preload =
+    "auto";
+
+let lyaVoiceUnlocked =
+    false;
+
+
+    /* ========================================================
+   DESBLOQUEO DE AUDIO DE LYA
+   ======================================================== */
+
+function unlockLyaAudio() {
+
+    if (lyaVoiceUnlocked) {
+        return;
+    }
+
+    try {
+
+        const silentAudio =
+            new Audio();
+
+        silentAudio.src =
+            "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=";
+
+        silentAudio.volume =
+            0.001;
+
+        const playPromise =
+            silentAudio.play();
+
+        if (playPromise) {
+
+            playPromise
+                .then(function() {
+
+                    silentAudio.pause();
+
+                    lyaVoiceUnlocked =
+                        true;
+
+                    console.log(
+                        "LYA VOICE: audio desbloqueado"
+                    );
+
+                })
+                .catch(function(error) {
+
+                    console.log(
+                        "LYA VOICE: el navegador aún no permite audio",
+                        error
+                    );
+
+                });
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            "LYA VOICE UNLOCK ERROR:",
+            error
+        );
+
+    }
+}
+
+
 const imageInput =
     document.getElementById(
         "imageInput"
@@ -3856,6 +3931,9 @@ removeImage.addEventListener(
 
 async function sendMessage() {
 
+    // Desbloquea la reproducción de audio mediante el gesto del usuario
+    unlockLyaAudio();
+
     const message =
         input.value.trim();
 
@@ -4068,6 +4146,109 @@ async function sendMessage() {
 /* ========================================================
    STREAMING TEXTO
    ======================================================== */
+
+
+/* ========================================================
+   VOZ DE LYA
+   ======================================================== */
+
+async function speakLya(text) {
+
+    if (
+        !text ||
+        !text.trim()
+    ) {
+        return;
+    }
+
+    try {
+
+        status.textContent =
+            "● LYA ESTÁ HABLANDO";
+
+        const response =
+            await fetch(
+                "/voice",
+                {
+                    method:
+                        "POST",
+
+                    headers:
+                        {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                    body:
+                        JSON.stringify(
+                            {
+                                text:
+                                    text
+                            }
+                        )
+                }
+            );
+
+        if (!response.ok) {
+
+            throw new Error(
+                "No se pudo generar la voz. HTTP " +
+                response.status
+            );
+        }
+
+        const audioBlob =
+            await response.blob();
+
+        const audioUrl =
+            URL.createObjectURL(
+                audioBlob
+            );
+
+        lyaVoicePlayer.src =
+            audioUrl;
+
+        lyaVoicePlayer.onended =
+            function() {
+
+                URL.revokeObjectURL(
+                    audioUrl
+                );
+
+                status.textContent =
+                    "● SYSTEM ONLINE";
+            };
+
+        lyaVoicePlayer.onerror =
+            function(error) {
+
+                console.error(
+                    "LYA VOICE PLAYBACK ERROR:",
+                    error
+                );
+
+                URL.revokeObjectURL(
+                    audioUrl
+                );
+
+                status.textContent =
+                    "● SYSTEM ONLINE";
+            };
+
+        await lyaVoicePlayer.play();
+
+    } catch (error) {
+
+        console.error(
+            "LYA VOICE ERROR:",
+            error
+        );
+
+        status.textContent =
+            "● SYSTEM ONLINE";
+    }
+}
+
 
 async function streamMessage(
     message
@@ -4313,6 +4494,16 @@ async function streamMessage(
 
         }
 
+    }
+
+    if (
+        fullText &&
+        fullText.trim()
+    ) {
+
+        await speakLya(
+            fullText
+        );
     }
 
 }
