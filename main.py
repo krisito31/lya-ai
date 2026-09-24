@@ -3261,37 +3261,49 @@ function unlockLyaAudio() {
 
     try {
 
-        const silentAudio =
-            new Audio();
+        /*
+         * Utilizamos EL MISMO elemento de audio
+         * que Lya utilizará posteriormente para hablar.
+         *
+         * Esto es importante en móviles porque el navegador
+         * puede bloquear la reproducción automática si el
+         * elemento nunca fue activado mediante un gesto del usuario.
+         */
 
-        silentAudio.src =
+        lyaVoicePlayer.src =
             "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YQAAAAA=";
 
-        silentAudio.volume =
+        lyaVoicePlayer.volume =
             0.001;
 
         const playPromise =
-            silentAudio.play();
+            lyaVoicePlayer.play();
 
         if (playPromise) {
 
             playPromise
                 .then(function() {
 
-                    silentAudio.pause();
+                    lyaVoicePlayer.pause();
+
+                    lyaVoicePlayer.currentTime =
+                        0;
+
+                    lyaVoicePlayer.src =
+                        "";
 
                     lyaVoiceUnlocked =
                         true;
 
                     console.log(
-                        "LYA VOICE: audio desbloqueado"
+                        "LYA VOICE: reproductor desbloqueado"
                     );
 
                 })
                 .catch(function(error) {
 
                     console.log(
-                        "LYA VOICE: el navegador aún no permite audio",
+                        "LYA VOICE: el navegador bloqueó el desbloqueo",
                         error
                     );
 
