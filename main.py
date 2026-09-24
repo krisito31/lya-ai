@@ -1951,7 +1951,9 @@ def voice_endpoint(request: VoiceRequest):
         content=audio,
         media_type="audio/wav",
         headers={
-            "Content-Disposition": "inline; filename=lya_voice.wav"
+    "Content-Disposition": "inline; filename=lya_voice.wav",
+    "Content-Length": str(len(audio)),
+    "Cache-Control": "no-cache"
         }
     )
 
